@@ -246,12 +246,53 @@ def refresh_data():
 def settings():
     meter = Meter.query.filter_by(user_id=current_user.id).first()
     if request.method == 'POST':
-        telegram_chat_id = request.form.get('telegram_chat_id')
-        if telegram_chat_id:
-            telegram_chat_id = telegram_chat_id.strip()
-        current_user.telegram_chat_id = telegram_chat_id
-        db.session.commit()
-        flash('Settings updated successfully!', 'success')
+        action = request.form.get('action')
+        
+        if action == 'update_telegram':
+            telegram_chat_id = request.form.get('telegram_chat_id')
+            if telegram_chat_id:
+                telegram_chat_id = telegram_chat_id.strip()
+            current_user.telegram_chat_id = telegram_chat_id
+            db.session.commit()
+            flash('Telegram settings updated successfully!', 'success')
+            
+        elif action == 'update_meter':
+            new_meter_number = request.form.get('meter_number')
+            if new_meter_number:
+                new_meter_number = new_meter_number.strip()
+            
+            if not new_meter_number:
+                flash('Meter number cannot be empty.', 'danger')
+                return redirect(url_for('settings'))
+                
+            # Check if registered by another user
+            existing = Meter.query.filter_by(meter_number=new_meter_number).first()
+            if existing and existing.user_id != current_user.id:
+                flash('This meter number is already registered to another account.', 'danger')
+                return redirect(url_for('settings'))
+                
+            if not meter:
+                meter = Meter(user_id=current_user.id, meter_number=new_meter_number)
+                db.session.add(meter)
+            else:
+                if meter.meter_number != new_meter_number:
+                    # Reset old metadata and remove old data tables since it's a new meter
+                    meter.meter_number = new_meter_number
+                    meter.customer_name = None
+                    meter.address = None
+                    meter.phone = None
+                    meter.feeder = None
+                    meter.tariff = None
+                    meter.load = None
+                    
+                    from models import Balance, Recharge, MonthlyUsage
+                    Balance.query.filter_by(meter_id=meter.id).delete()
+                    Recharge.query.filter_by(meter_id=meter.id).delete()
+                    MonthlyUsage.query.filter_by(meter_id=meter.id).delete()
+            
+            db.session.commit()
+            flash('Meter number updated! Old data cleared. Click "Refresh Data" on the dashboard to fetch the new meter\'s details.', 'success')
+            
         return redirect(url_for('settings'))
         
     bot_configured = bool(os.environ.get('TELEGRAM_BOT_TOKEN'))
