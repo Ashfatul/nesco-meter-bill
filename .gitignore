@@ -122,3 +122,8 @@ venv.bak/
 
 # Local run credentials scripts
 run_fetch.sh
+
+# Debug HTML dumps
+debug_monthly.html
+debug_recharge.html
+
