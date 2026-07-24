@@ -10,10 +10,26 @@ from datetime import datetime, timedelta
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
 
+import re
+from urllib.parse import quote_plus
+
 # Dynamically fetch database URI from environment, defaulting to SQLite
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///nesco.db')
-if db_url.startswith("postgres://"):
-    db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+if db_url and (db_url.startswith("postgres://") or db_url.startswith("postgresql://")):
+    # Standardize scheme
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql://", 1)
+        
+    # Match scheme, username, password, host/port, and database path
+    # This correctly parses passwords containing '@' or other special characters
+    match = re.match(r"^(postgresql://)([^:]+):(.*)@([^@/]+)(/.*)?$", db_url)
+    if match:
+        scheme, username, password, hostinfo, path = match.groups()
+        # Avoid double-encoding if it's already encoded (contains '%')
+        if "%" not in password:
+            password = quote_plus(password)
+        db_url = f"{scheme}{username}:{password}@{hostinfo}{path or ''}"
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
