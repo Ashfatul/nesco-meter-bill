@@ -11,6 +11,11 @@ def run_daily_fetch():
     It loops through all registered users and fetches their latest balance.
     """
     with app.app_context():
+        # Check database connection type
+        db_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+        db_type = "PostgreSQL" if "postgresql" in db_uri else "SQLite"
+        print(f"[{datetime.now()}] Connected to database type: {db_type}")
+        
         users = User.query.all()
         print(f"[{datetime.now()}] Found {len(users)} users in database to fetch.")
         for user in users:
