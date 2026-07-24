@@ -1,7 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 import re
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 class NescoScraper:
     def __init__(self):
@@ -48,7 +48,7 @@ class NescoScraper:
                 'current_balance': 0.0,
                 'customer_name': 'Unknown',
                 'address': 'Unknown',
-                'date': datetime.now().date()
+                'date': (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=6)).date()
             }
             
             with open("debug_monthly.html", "w", encoding="utf-8") as f:

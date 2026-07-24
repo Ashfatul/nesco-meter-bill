@@ -3,7 +3,7 @@ import os
 from app import app, db
 from models import User, Meter, Balance
 from scraper import NescoScraper
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 def run_daily_fetch():
     """
@@ -28,10 +28,10 @@ def run_daily_fetch():
             data = scraper.fetch_monthly_usage(meter.meter_number)
             
             if data and 'current_balance' in data:
-                # Update last sync time
-                meter.last_synced = datetime.now()
+                # Update last sync time (UTC)
+                meter.last_synced = datetime.now(timezone.utc).replace(tzinfo=None)
                 
-                today = datetime.now().date()
+                today = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=6)).date()
                 existing = Balance.query.filter_by(meter_id=meter.id, date=today).first()
                 if not existing:
                     new_balance = Balance(meter_id=meter.id, date=today, balance=data['current_balance'])

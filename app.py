@@ -5,7 +5,7 @@ from flask_login import login_user, login_required, logout_user, current_user
 from extensions import db, login_manager
 from models import User, Meter, Balance, Recharge
 from scraper import NescoScraper
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
@@ -177,11 +177,11 @@ def refresh_data():
         # Fetch usage
         data = scraper.fetch_monthly_usage(meter.meter_number)
         if data is not None:
-            # Update last sync time
-            meter.last_synced = datetime.now()
+            # Update last sync time (UTC)
+            meter.last_synced = datetime.now(timezone.utc).replace(tzinfo=None)
             
-            # Save or update today's balance
-            today = datetime.now().date()
+            # Save or update today's balance (Bangladesh timezone BST = UTC+6)
+            today = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=6)).date()
             balance = Balance.query.filter_by(meter_id=meter.id, date=today).first()
             if balance:
                 balance.balance = data['current_balance']
@@ -353,13 +353,25 @@ def logout():
 def init_db():
     with app.app_context():
         db.create_all()
-        # Self-healing migrations for PostgreSQL (Supabase)
+        # Self-healing migrations for SQLite and PostgreSQL
         try:
-            if "sqlite" not in app.config['SQLALCHEMY_DATABASE_URI']:
+            if "sqlite" in app.config.get('SQLALCHEMY_DATABASE_URI', ''):
+                # SQLite migrations
+                user_cols = [row[1] for row in db.session.execute(db.text("PRAGMA table_info(users)")).fetchall()]
+                if 'telegram_chat_id' not in user_cols:
+                    db.session.execute(db.text("ALTER TABLE users ADD COLUMN telegram_chat_id VARCHAR(100)"))
+                    db.session.commit()
+                
+                meter_cols = [row[1] for row in db.session.execute(db.text("PRAGMA table_info(meters)")).fetchall()]
+                if 'last_synced' not in meter_cols:
+                    db.session.execute(db.text("ALTER TABLE meters ADD COLUMN last_synced TIMESTAMP"))
+                    db.session.commit()
+            else:
+                # PostgreSQL (Supabase) migrations
                 db.session.execute(db.text("ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(100)"))
                 db.session.execute(db.text("ALTER TABLE meters ADD COLUMN IF NOT EXISTS last_synced TIMESTAMP"))
                 db.session.commit()
-                print("Database self-healing columns verified successfully.")
+            print("Database self-healing columns verified successfully.")
         except Exception as e:
             db.session.rollback()
             print(f"Database self-healing migration skipped/failed: {e}")
