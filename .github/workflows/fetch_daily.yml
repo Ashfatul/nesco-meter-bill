@@ -1,0 +1,29 @@
+name: NESCO Daily Balance Fetcher
+
+on:
+  schedule:
+    - cron: '0 4 * * *' # Runs at 4:00 AM UTC every day
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Fetch Script
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python fetch_daily.py

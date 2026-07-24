@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Dashboard</h2>
+    <a href="{{ url_for('refresh_data') }}" class="btn btn-outline-primary" id="refreshBtn" onclick="showLoader()">
+        <span id="refreshText">Refresh Data</span>
+        <span id="refreshLoader" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+    </a>
+</div>
+
+<!-- User Details Card -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body">
+        <h5 class="card-title text-muted mb-3 border-bottom pb-2">Customer Details</h5>
+        <div class="row">
+            <div class="col-md-3 mb-2"><strong>Name:</strong> <br>{{ meter.customer_name or 'N/A' }}</div>
+            <div class="col-md-3 mb-2"><strong>Phone:</strong> <br>{{ meter.phone or 'N/A' }}</div>
+            <div class="col-md-3 mb-2"><strong>Meter Number:</strong> <br>{{ meter.meter_number or 'N/A' }}</div>
+            <div class="col-md-3 mb-2"><strong>Feeder:</strong> <br>{{ meter.feeder or 'N/A' }}</div>
+        </div>
+        <div class="row mt-2">
+            <div class="col-md-3 mb-2"><strong>Tariff:</strong> <br>{{ meter.tariff or 'N/A' }}</div>
+            <div class="col-md-3 mb-2"><strong>Load:</strong> <br>{{ meter.load or 'N/A' }}</div>
+            <div class="col-md-6 mb-2"><strong>Address:</strong> <br>{{ meter.address or 'N/A' }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card bg-primary text-white h-100 shadow-sm border-0">
+            <div class="card-body">
+                <h6 class="card-title text-uppercase text-white-50">Current Balance</h6>
+                <h2 class="mb-0">৳ {{ "%.2f"|format(current_balance) }}</h2>
+                <small>As of last refresh</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card bg-success text-white h-100 shadow-sm border-0">
+            <div class="card-body">
+                <h6 class="card-title text-uppercase text-white-50">Yesterday's Usage</h6>
+                <h2 class="mb-0">{{ yesterday_usage_display }}</h2>
+                <small>Calculated automatically</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card bg-info text-white h-100 shadow-sm border-0">
+            <div class="card-body">
+                <h6 class="card-title text-uppercase text-white-50">Avg. Daily Usage</h6>
+                <h2 class="mb-0">৳ {{ "%.2f"|format(avg_daily_usage) }}</h2>
+                <small>Historical average</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card bg-warning text-dark h-100 shadow-sm border-0">
+            <div class="card-body">
+                <h6 class="card-title text-uppercase text-dark-50">Est. Days Remaining</h6>
+                <h2 class="mb-0">{{ days_remaining }} Days</h2>
+                <small>Based on average usage</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Graphs Section -->
+<div class="row mb-4">
+    <div class="col-md-6 mb-3">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <h5 class="card-title mb-3">Daily Usage Trend</h5>
+                <div style="position: relative; height: 250px; width: 100%;">
+                    <canvas id="dailyUsageChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 mb-3">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <h5 class="card-title mb-3">Monthly Usage Trend</h5>
+                <div style="position: relative; height: 250px; width: 100%;">
+                    <canvas id="monthlyUsageChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Daily Usages Table -->
+<div class="row">
+    <div class="col-lg-12 mb-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <h5 class="card-title mb-4">Daily Usage Estimation</h5>
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered text-center align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Date</th>
+                                <th>End of Day Balance (Tk)</th>
+                                <th>Estimated Usage (Tk)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for usage in daily_usages %}
+                            <tr>
+                                <td>{{ usage.date }}</td>
+                                <td class="fw-bold">৳ {{ "%.2f"|format(usage.balance) }}</td>
+                                <td class="text-danger fw-bold">৳ {{ "%.2f"|format(usage.usage) }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="3" class="text-center text-muted">No daily usages calculated yet. System needs at least 2 days of data.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recharge History -->
+<div class="row">
+    <div class="col-lg-12 mb-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <h5 class="card-title mb-4">Recharge History (Last 10)</h5>
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered text-center align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Date</th>
+                                <th>Token Number</th>
+                                <th>Method</th>
+                                <th>Bidduth (Tk)</th>
+                                <th>Total Paid (Tk)</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for recharge in meter.recharges|sort(attribute='date', reverse=True) %}
+                            {% if loop.index <= 10 %}
+                            <tr>
+                                <td>{{ recharge.date.strftime('%Y-%m-%d %I:%M %p') }}</td>
+                                <td class="text-primary fw-bold">{{ recharge.token }}</td>
+                                <td><span class="badge bg-secondary">{{ recharge.method }}</span></td>
+                                <td>৳ {{ "%.2f"|format(recharge.energy_cost) }}</td>
+                                <td class="fw-bold">৳ {{ "%.2f"|format(recharge.amount) }}</td>
+                                <td>
+                                    {% if recharge.status == 'Success' %}
+                                        <span class="badge bg-success">Success</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">{{ recharge.status }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% else %}
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">No recharges found</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Monthly Usage -->
+<div class="row">
+    <div class="col-lg-12 mb-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <h5 class="card-title mb-4">Monthly Usage History (Last 12 Months)</h5>
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered text-center align-middle" style="font-size: 0.9em;">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Year</th>
+                                <th>Month</th>
+                                <th>Total Recharge</th>
+                                <th>Rebate</th>
+                                <th>Electricity (Tk)</th>
+                                <th>Meter Rent</th>
+                                <th>Demand Charge</th>
+                                <th>VAT</th>
+                                <th>Total Usage (Tk)</th>
+                                <th>End Bal (Tk)</th>
+                                <th>Usage (kWh)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for usage in monthly_usages %}
+                            <tr>
+                                <td>{{ usage.year }}</td>
+                                <td>{{ usage.month }}</td>
+                                <td>৳ {{ "%.2f"|format(usage.total_recharge) }}</td>
+                                <td>৳ {{ "%.2f"|format(usage.total_recharge - usage.used_electricity_tk - usage.meter_rent - usage.demand_charge - usage.vat) }}</td> <!-- Rebate approx -->
+                                <td>৳ {{ "%.2f"|format(usage.used_electricity_tk) }}</td>
+                                <td>৳ {{ "%.2f"|format(usage.meter_rent) }}</td>
+                                <td>৳ {{ "%.2f"|format(usage.demand_charge) }}</td>
+                                <td>৳ {{ "%.2f"|format(usage.vat) }}</td>
+                                <td class="fw-bold">৳ {{ "%.2f"|format(usage.total_usage_tk) }}</td>
+                                <td class="text-primary fw-bold">৳ {{ "%.2f"|format(usage.end_month_balance) }}</td>
+                                <td class="fw-bold text-success">{{ "%.2f"|format(usage.used_energy_kwh) }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="11" class="text-center text-muted">No monthly usage data found</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    function showLoader() {
+        document.getElementById('refreshBtn').classList.add('disabled');
+        document.getElementById('refreshText').innerText = 'Fetching Data...';
+        document.getElementById('refreshLoader').classList.remove('d-none');
+    }
+
+    // Chart Data Passed from Flask
+    const dailyDates = {{ chart_daily_dates | tojson }};
+    const dailyValues = {{ chart_daily_values | tojson }};
+    const monthlyLabels = {{ chart_monthly_labels | tojson }};
+    const monthlyValues = {{ chart_monthly_values | tojson }};
+
+    // Daily Usage Chart
+    if (dailyDates.length > 0) {
+        new Chart(document.getElementById('dailyUsageChart'), {
+            type: 'line',
+            data: {
+                labels: dailyDates,
+                datasets: [{
+                    label: 'Usage (Tk)',
+                    data: dailyValues,
+                    borderColor: '#198754',
+                    backgroundColor: 'rgba(25, 135, 84, 0.2)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    // Monthly Usage Chart
+    if (monthlyLabels.length > 0) {
+        new Chart(document.getElementById('monthlyUsageChart'), {
+            type: 'bar',
+            data: {
+                labels: monthlyLabels,
+                datasets: [{
+                    label: 'Total Usage (Tk)',
+                    data: monthlyValues,
+                    backgroundColor: '#0d6efd',
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    }
+</script>
+{% endblock %}
