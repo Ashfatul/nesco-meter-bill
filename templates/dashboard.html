@@ -34,7 +34,9 @@
             <div class="card-body">
                 <h6 class="card-title text-uppercase text-white-50">Current Balance</h6>
                 <h2 class="mb-0">৳ {{ "%.2f"|format(current_balance) }}</h2>
-                <small>As of last refresh</small>
+                <small class="d-block mt-1" style="font-size: 0.75rem; opacity: 0.85;">
+                    Synced: {{ last_synced_bst.strftime('%Y-%m-%d %I:%M %p') if last_synced_bst else 'Never' }}
+                </small>
             </div>
         </div>
     </div>

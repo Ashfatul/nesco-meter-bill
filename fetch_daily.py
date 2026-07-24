@@ -22,6 +22,9 @@ def run_daily_fetch():
             data = scraper.fetch_monthly_usage(meter.meter_number)
             
             if data and 'current_balance' in data:
+                # Update last sync time
+                meter.last_synced = datetime.now()
+                
                 today = datetime.now().date()
                 existing = Balance.query.filter_by(meter_id=meter.id, date=today).first()
                 if not existing:
@@ -30,7 +33,8 @@ def run_daily_fetch():
                     db.session.commit()
                     print(f"[{datetime.now()}] Success: Recorded balance ৳ {data['current_balance']}")
                 else:
-                    print(f"[{datetime.now()}] Skipped: Balance already recorded for today.")
+                    db.session.commit() # Save the last_synced time even if balance is already recorded
+                    print(f"[{datetime.now()}] Skipped: Balance already recorded for today. Last sync timestamp updated.")
             else:
                 print(f"[{datetime.now()}] Error: Failed to fetch balance for {meter.meter_number}.")
 

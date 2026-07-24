@@ -150,6 +150,9 @@ def dashboard():
     chart_monthly_labels = [f"{u.month} {u.year}" for u in reversed(monthly_usages)]
     chart_monthly_values = [u.total_usage_tk for u in reversed(monthly_usages)]
 
+    # Calculate last sync time in BST (+6 hours) for display
+    last_synced_bst = meter.last_synced + timedelta(hours=6) if meter.last_synced else None
+
     return render_template('dashboard.html', 
                            meter=meter, 
                            current_balance=current_balance,
@@ -161,7 +164,8 @@ def dashboard():
                            chart_daily_dates=chart_daily_dates,
                            chart_daily_values=chart_daily_values,
                            chart_monthly_labels=chart_monthly_labels,
-                           chart_monthly_values=chart_monthly_values)
+                           chart_monthly_values=chart_monthly_values,
+                           last_synced_bst=last_synced_bst)
 
 @app.route('/refresh_data')
 @login_required
@@ -173,6 +177,9 @@ def refresh_data():
         # Fetch usage
         data = scraper.fetch_monthly_usage(meter.meter_number)
         if data is not None:
+            # Update last sync time
+            meter.last_synced = datetime.now()
+            
             # Save or update today's balance
             today = datetime.now().date()
             balance = Balance.query.filter_by(meter_id=meter.id, date=today).first()
@@ -233,6 +240,29 @@ def refresh_data():
             flash('Failed to fetch data from NESCO.', 'danger')
             
     return redirect(url_for('dashboard'))
+
+@app.route('/change_password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    if request.method == 'POST':
+        current_password = request.form.get('current_password')
+        new_password = request.form.get('new_password')
+        confirm_password = request.form.get('confirm_password')
+        
+        if not check_password_hash(current_user.password_hash, current_password):
+            flash('Current password is incorrect', 'danger')
+            return redirect(url_for('change_password'))
+            
+        if new_password != confirm_password:
+            flash('New passwords do not match', 'danger')
+            return redirect(url_for('change_password'))
+            
+        current_user.password_hash = generate_password_hash(new_password)
+        db.session.commit()
+        flash('Password changed successfully!', 'success')
+        return redirect(url_for('dashboard'))
+        
+    return render_template('change_password.html')
 
 @app.route('/logout')
 @login_required
