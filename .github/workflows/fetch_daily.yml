@@ -2,7 +2,7 @@ name: NESCO Daily Balance Fetcher
 
 on:
   schedule:
-    - cron: '0 4 * * *' # Runs at 4:00 AM UTC every day
+    - cron: '0 1 * * *' # Runs at 1:00 AM UTC (7:00 AM Bangladesh Time) every day
   workflow_dispatch: # Allows manual trigger from GitHub UI
 
 jobs:
