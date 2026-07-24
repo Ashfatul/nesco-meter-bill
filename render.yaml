@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: nesco-meter-bill
+    runtime: python
+    buildCommand: pip install -r requirements.txt && python -c "from app import app, db; app.app_context().push(); db.create_all()"
+    startCommand: gunicorn app:app
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
