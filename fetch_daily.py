@@ -12,6 +12,7 @@ def run_daily_fetch():
     """
     with app.app_context():
         users = User.query.all()
+        print(f"[{datetime.now()}] Found {len(users)} users in database to fetch.")
         for user in users:
             meter = Meter.query.filter_by(user_id=user.id).first()
             if not meter:
