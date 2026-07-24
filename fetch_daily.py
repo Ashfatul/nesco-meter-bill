@@ -35,6 +35,13 @@ def run_daily_fetch():
                 else:
                     db.session.commit() # Save the last_synced time even if balance is already recorded
                     print(f"[{datetime.now()}] Skipped: Balance already recorded for today. Last sync timestamp updated.")
+                
+                # Send daily Telegram alert
+                try:
+                    from telegram_bot import send_telegram_alert
+                    send_telegram_alert(user, meter)
+                except Exception as e:
+                    print(f"[{datetime.now()}] Error sending Telegram alert for user {user.email}: {e}")
             else:
                 print(f"[{datetime.now()}] Error: Failed to fetch balance for {meter.meter_number}.")
 

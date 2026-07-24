@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center mt-4">
+    <div class="col-md-8 col-lg-6">
+        <!-- Main Settings Card -->
+        <div class="card shadow-sm border-0 rounded-3 mb-4">
+            <div class="card-body p-4 p-md-5">
+                <h3 class="fw-bold mb-4">Settings & Integrations</h3>
+                
+                <!-- Server Status Indicator -->
+                <div class="mb-4">
+                    <label class="form-label fw-semibold">Telegram Bot Status</label>
+                    {% if bot_configured %}
+                        <div class="alert alert-success d-flex align-items-center py-2 px-3 border-0 rounded-3" role="alert">
+                            <span class="fw-medium text-success" style="font-size: 0.9rem;">
+                                ● Active (Telegram Bot Token is configured on the server)
+                            </span>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-warning d-flex align-items-center py-2 px-3 border-0 rounded-3" role="alert">
+                            <span class="fw-medium text-warning" style="font-size: 0.9rem;">
+                                ⚠️ Inactive (Set <code>TELEGRAM_BOT_TOKEN</code> in your environment variables to enable notifications)
+                            </span>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Chat ID Configuration Form -->
+                <form method="POST" action="{{ url_for('settings') }}" class="border-bottom pb-4 mb-4">
+                    <div class="mb-3">
+                        <label for="telegram_chat_id" class="form-label fw-semibold">Telegram Chat ID</label>
+                        <input type="text" class="form-control" id="telegram_chat_id" name="telegram_chat_id" 
+                               placeholder="e.g. 123456789" 
+                               value="{{ current_user.telegram_chat_id or '' }}">
+                        <div class="form-text mt-2 text-muted">
+                            To find your Chat ID:
+                            <ol class="ps-3 mt-1 small">
+                                <li>Open Telegram and search for the bot <strong>@userinfobot</strong> or <strong>@GetChatID_Bot</strong>.</li>
+                                <li>Send any message to that bot.</li>
+                                <li>It will respond with your numeric <strong>ID</strong> (e.g., <code>58921820</code>). Copy and paste it above.</li>
+                            </ol>
+                        </div>
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary py-2 fw-semibold">Save Chat ID</button>
+                    </div>
+                </form>
+
+                <!-- Test Connection Trigger -->
+                <div>
+                    <label class="form-label fw-semibold mb-2">Test Telegram Notifications</label>
+                    <p class="text-muted small">Verify that the Telegram Bot can reach you. Make sure you have saved your Chat ID above and started a conversation with your bot first.</p>
+                    <form method="POST" action="{{ url_for('test_telegram') }}">
+                        <button type="submit" class="btn btn-outline-success py-2 w-100 fw-semibold" 
+                                {% if not current_user.telegram_chat_id or not bot_configured %}disabled{% endif %}>
+                            Send Test Message
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Cancel button back to dashboard -->
+        <div class="text-center">
+            <a href="{{ url_for('dashboard') }}" class="text-decoration-none text-secondary small">← Back to Dashboard</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -7,6 +7,7 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
+    telegram_chat_id = db.Column(db.String(100))
     
     # Relationships
     meters = db.relationship('Meter', backref='user', lazy=True)
@@ -28,6 +29,37 @@ class Meter(db.Model):
     balances = db.relationship('Balance', backref='meter', lazy=True)
     recharges = db.relationship('Recharge', backref='meter', lazy=True)
     monthly_usages = db.relationship('MonthlyUsage', backref='meter', lazy=True)
+
+    def get_metrics(self):
+        # Sort balances descending (latest first)
+        balances_sorted = sorted(self.balances, key=lambda x: x.date, reverse=True)
+        if not balances_sorted:
+            return {
+                'current_balance': 0.0,
+                'yesterday_usage': 0.0,
+                'avg_daily_usage': 0.0,
+                'days_remaining': 0
+            }
+        
+        current_balance = balances_sorted[0].balance
+        
+        daily_usages = []
+        for i in range(len(balances_sorted) - 1):
+            usage = balances_sorted[i+1].balance - balances_sorted[i].balance
+            if usage < 0:
+                usage = 0.0
+            daily_usages.append(usage)
+            
+        yesterday_usage = daily_usages[0] if daily_usages else 0.0
+        avg_daily_usage = sum(daily_usages) / len(daily_usages) if daily_usages else 0.0
+        days_remaining = int(current_balance / avg_daily_usage) if avg_daily_usage > 0 else 0
+        
+        return {
+            'current_balance': current_balance,
+            'yesterday_usage': yesterday_usage,
+            'avg_daily_usage': avg_daily_usage,
+            'days_remaining': days_remaining
+        }
 
 class Balance(db.Model):
     __tablename__ = 'balances'

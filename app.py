@@ -241,6 +241,45 @@ def refresh_data():
             
     return redirect(url_for('dashboard'))
 
+@app.route('/settings', methods=['GET', 'POST'])
+@login_required
+def settings():
+    meter = Meter.query.filter_by(user_id=current_user.id).first()
+    if request.method == 'POST':
+        telegram_chat_id = request.form.get('telegram_chat_id')
+        if telegram_chat_id:
+            telegram_chat_id = telegram_chat_id.strip()
+        current_user.telegram_chat_id = telegram_chat_id
+        db.session.commit()
+        flash('Settings updated successfully!', 'success')
+        return redirect(url_for('settings'))
+        
+    bot_configured = bool(os.environ.get('TELEGRAM_BOT_TOKEN'))
+    return render_template('settings.html', meter=meter, bot_configured=bot_configured)
+
+@app.route('/test_telegram', methods=['POST'])
+@login_required
+def test_telegram():
+    bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+    chat_id = current_user.telegram_chat_id
+    
+    if not bot_token:
+        flash('Telegram Bot is not configured on the server. Please set TELEGRAM_BOT_TOKEN environment variable.', 'danger')
+        return redirect(url_for('settings'))
+        
+    if not chat_id:
+        flash('Please save your Telegram Chat ID first.', 'warning')
+        return redirect(url_for('settings'))
+        
+    from telegram_bot import send_test_message
+    success, error_msg = send_test_message(bot_token, chat_id)
+    if success:
+        flash('Test message sent successfully! Check your Telegram chat.', 'success')
+    else:
+        flash(f'Failed to send test message: {error_msg}', 'danger')
+        
+    return redirect(url_for('settings'))
+
 @app.route('/change_password', methods=['GET', 'POST'])
 @login_required
 def change_password():
