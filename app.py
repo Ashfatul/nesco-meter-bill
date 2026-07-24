@@ -353,7 +353,22 @@ def logout():
 def init_db():
     with app.app_context():
         db.create_all()
+        # Self-healing migrations for PostgreSQL (Supabase)
+        try:
+            if "sqlite" not in app.config['SQLALCHEMY_DATABASE_URI']:
+                db.session.execute(db.text("ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(100)"))
+                db.session.execute(db.text("ALTER TABLE meters ADD COLUMN IF NOT EXISTS last_synced TIMESTAMP"))
+                db.session.commit()
+                print("Database self-healing columns verified successfully.")
+        except Exception as e:
+            db.session.rollback()
+            print(f"Database self-healing migration skipped/failed: {e}")
+
+# Run database setup and migrations automatically on startup
+try:
+    init_db()
+except Exception as e:
+    print(f"Database initialization failed: {e}")
 
 if __name__ == '__main__':
-    init_db()
     app.run(debug=True, port=5000)
