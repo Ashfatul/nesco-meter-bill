@@ -119,3 +119,6 @@ venv.bak/
 
 # Application logs
 *.log
+
+# Local run credentials scripts
+run_fetch.sh
