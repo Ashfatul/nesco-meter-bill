@@ -179,6 +179,8 @@ def dashboard():
                     'usage_value': 0.0,
                     'status': 'Sync missing'
                 })
+        # Slice to show only latest 31 days
+        daily_usages = daily_usages[:31]
     
     # For yesterday usage, if not available show 'N/A'
     yesterday_usage_display = "N/A (Need 2 days of data)"
@@ -317,6 +319,20 @@ def logs():
 def service_worker():
     return app.send_static_file('js/sw.js'), 200, {'Content-Type': 'application/javascript'}
 
+@app.route('/request_local_sync')
+@login_required
+def request_local_sync():
+    meter = Meter.query.filter_by(user_id=current_user.id).first()
+    if meter:
+        meter.sync_requested = True
+        db.session.commit()
+        log_fetch(current_user.id, "Success", "Requested a manual sync from local PC.", "Manual")
+        flash('Local sync requested. If your local PC is on, it will fetch the latest data shortly.', 'info')
+    else:
+        flash('No meter configured to sync.', 'warning')
+    return redirect(url_for('dashboard'))
+
+
 
 @app.route('/settings', methods=['GET', 'POST'])
 @login_required
@@ -443,6 +459,9 @@ def init_db():
                 if 'last_synced' not in meter_cols:
                     db.session.execute(db.text("ALTER TABLE meters ADD COLUMN last_synced TIMESTAMP"))
                     db.session.commit()
+                if 'sync_requested' not in meter_cols:
+                    db.session.execute(db.text("ALTER TABLE meters ADD COLUMN sync_requested BOOLEAN DEFAULT 0 NOT NULL"))
+                    db.session.commit()
 
                 balance_cols = [row[1] for row in db.session.execute(db.text("PRAGMA table_info(balances)")).fetchall()]
                 if 'telegram_sent' not in balance_cols:
@@ -453,6 +472,7 @@ def init_db():
                 db.session.execute(db.text("ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id TEXT"))
                 db.session.execute(db.text("ALTER TABLE users ALTER COLUMN telegram_chat_id TYPE TEXT"))
                 db.session.execute(db.text("ALTER TABLE meters ADD COLUMN IF NOT EXISTS last_synced TIMESTAMP"))
+                db.session.execute(db.text("ALTER TABLE meters ADD COLUMN IF NOT EXISTS sync_requested BOOLEAN DEFAULT FALSE NOT NULL"))
                 db.session.execute(db.text("ALTER TABLE balances ADD COLUMN IF NOT EXISTS telegram_sent BOOLEAN DEFAULT FALSE NOT NULL"))
                 db.session.commit()
             print("Database self-healing columns verified successfully.")

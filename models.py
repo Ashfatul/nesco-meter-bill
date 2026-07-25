@@ -24,6 +24,7 @@ class Meter(db.Model):
     tariff = db.Column(db.String(50))
     load = db.Column(db.String(50))
     last_synced = db.Column(db.DateTime)
+    sync_requested = db.Column(db.Boolean, default=False, nullable=False)
     
     # Relationships
     balances = db.relationship('Balance', backref='meter', lazy=True)

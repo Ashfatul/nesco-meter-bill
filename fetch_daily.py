@@ -10,17 +10,22 @@ def run_daily_fetch():
     This script is designed to be run via a cron job.
     It loops through all registered users and fetches their latest balance.
     """
+    check_requested_only = "--check-requested" in sys.argv
+    
     with app.app_context():
         # Check database connection type
         db_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
         db_type = "PostgreSQL" if "postgresql" in db_uri else "SQLite"
-        print(f"[{datetime.now()}] Connected to database type: {db_type}")
+        print(f"[{datetime.now()}] Connected to database type: {db_type} (check_requested_only={check_requested_only})")
         
         users = User.query.all()
-        print(f"[{datetime.now()}] Found {len(users)} users in database to fetch.")
+        print(f"[{datetime.now()}] Found {len(users)} users in database to check/fetch.")
         for user in users:
             meter = Meter.query.filter_by(user_id=user.id).first()
             if not meter:
+                continue
+                
+            if check_requested_only and not meter.sync_requested:
                 continue
                 
             print(f"[{datetime.now()}] Fetching data for meter {meter.meter_number}...")
@@ -106,6 +111,10 @@ def run_daily_fetch():
                 details = f"Failed to fetch data from NESCO panel for meter: {meter.meter_number}."
                 log_fetch(user.id, "Failed", details, "Cron")
                 print(f"[{datetime.now()}] Error: Failed to fetch balance for {meter.meter_number}.")
+            
+            # Reset sync requested flag
+            meter.sync_requested = False
+            db.session.commit()
 
 
 if __name__ == '__main__':

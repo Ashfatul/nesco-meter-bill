@@ -3,13 +3,13 @@
   "name": "NESCO Meter Bill & Balance Tracker",
   "icons": [
     {
-      "src": "/static/icons/icon-192x192.jpg",
-      "type": "image/jpeg",
+      "src": "/static/icons/icon-192x192.png",
+      "type": "image/png",
       "sizes": "192x192"
     },
     {
-      "src": "/static/icons/icon-512x512.jpg",
-      "type": "image/jpeg",
+      "src": "/static/icons/icon-512x512.png",
+      "type": "image/png",
       "sizes": "512x512"
     }
   ],
