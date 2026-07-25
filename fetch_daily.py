@@ -1,6 +1,6 @@
 import sys
 import os
-from app import app, db
+from app import app, db, log_fetch
 from models import User, Meter, Balance
 from scraper import NescoScraper
 from datetime import datetime, timezone, timedelta
@@ -33,23 +33,80 @@ def run_daily_fetch():
                 
                 today = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=6)).date()
                 existing = Balance.query.filter_by(meter_id=meter.id, date=today).first()
+                
+                # Find the latest balance record before today
+                prev_balance_record = Balance.query.filter(
+                    Balance.meter_id == meter.id,
+                    Balance.date < today
+                ).order_by(Balance.date.desc()).first()
+                
+                current_val = data['current_balance']
+                balance_changed = False
+                if prev_balance_record is None or current_val != prev_balance_record.balance:
+                    balance_changed = True
+                    
+                telegram_sent_this_time = False
+                
                 if not existing:
-                    new_balance = Balance(meter_id=meter.id, date=today, balance=data['current_balance'])
+                    # Create new today balance record
+                    new_balance = Balance(meter_id=meter.id, date=today, balance=current_val, telegram_sent=False)
                     db.session.add(new_balance)
                     db.session.commit()
-                    print(f"[{datetime.now()}] Success: Recorded balance ৳ {data['current_balance']}")
                     
-                    # Send Telegram alert only for the first successful record of the day
-                    try:
-                        from telegram_bot import send_telegram_alert
-                        send_telegram_alert(user, meter)
-                    except Exception as e:
-                        print(f"[{datetime.now()}] Error sending Telegram alert for user {user.email}: {e}")
+                    if balance_changed:
+                        # Send telegram alert
+                        try:
+                            from telegram_bot import send_telegram_alert
+                            if send_telegram_alert(user, meter):
+                                new_balance.telegram_sent = True
+                                telegram_sent_this_time = True
+                        except Exception as e:
+                            print(f"[{datetime.now()}] Error sending Telegram alert for user {user.email}: {e}")
+                    
+                    db.session.commit()
+                    
+                    details = f"Scraped balance: ৳ {current_val:.2f}."
+                    if telegram_sent_this_time:
+                        details += " Balance changed. Telegram alert sent."
+                    else:
+                        details += " No balance change. Telegram alert skipped."
+                    
+                    log_fetch(user.id, "Success", details, "Cron")
+                    print(f"[{datetime.now()}] Success: Recorded balance ৳ {current_val}. {details}")
+                    
                 else:
-                    db.session.commit() # Save the last_synced time even if balance is already recorded
-                    print(f"[{datetime.now()}] Skipped: Balance already recorded for today. Last sync timestamp updated.")
+                    # Update existing today's balance
+                    old_recorded_val = existing.balance
+                    existing.balance = current_val
+                    db.session.commit()
+                    
+                    # If we haven't sent telegram today yet, check if we should send it now
+                    if not existing.telegram_sent and balance_changed:
+                        try:
+                            from telegram_bot import send_telegram_alert
+                            if send_telegram_alert(user, meter):
+                                existing.telegram_sent = True
+                                telegram_sent_this_time = True
+                        except Exception as e:
+                            print(f"[{datetime.now()}] Error sending Telegram alert for user {user.email}: {e}")
+                    
+                    db.session.commit()
+                    
+                    details = f"Scraped balance: ৳ {current_val:.2f} (Updated today's balance from ৳ {old_recorded_val:.2f})."
+                    if telegram_sent_this_time:
+                        details += " Telegram alert sent."
+                    elif existing.telegram_sent:
+                        details += " Telegram already sent today."
+                    else:
+                        details += " No balance change. Telegram alert skipped."
+                    
+                    log_fetch(user.id, "Success", details, "Cron")
+                    print(f"[{datetime.now()}] Success: Updated balance to ৳ {current_val}. {details}")
             else:
+                details = f"Failed to fetch data from NESCO panel for meter: {meter.meter_number}."
+                log_fetch(user.id, "Failed", details, "Cron")
                 print(f"[{datetime.now()}] Error: Failed to fetch balance for {meter.meter_number}.")
+
 
 if __name__ == '__main__':
     run_daily_fetch()

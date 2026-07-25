@@ -2,12 +2,17 @@ import os
 import requests
 
 def send_telegram_alert(user, meter):
-    """Formats and sends daily balance status to user's Telegram."""
+    """Formats and sends daily balance status to all configured Telegram Chat IDs."""
     bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
-    chat_id = user.telegram_chat_id
+    chat_id_str = user.telegram_chat_id
     
-    if not bot_token or not chat_id:
+    if not bot_token or not chat_id_str:
         print(f"Skipping Telegram notification for User {user.email}: TELEGRAM_BOT_TOKEN or telegram_chat_id not configured.")
+        return False
+        
+    chat_ids = [c.strip() for c in chat_id_str.split(',') if c.strip()]
+    if not chat_ids:
+        print(f"Skipping Telegram notification for User {user.email}: No valid chat IDs found.")
         return False
         
     metrics = meter.get_metrics()
@@ -30,38 +35,58 @@ def send_telegram_alert(user, meter):
         message += f"\n⚠️ <b>LOW BALANCE WARNING:</b> Your balance is below ৳ 50.00! Please recharge immediately."
         
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    payload = {
-        "chat_id": chat_id,
-        "text": message,
-        "parse_mode": "HTML"
-    }
     
-    try:
-        response = requests.post(url, json=payload, timeout=10)
-        if response.status_code == 200:
-            print(f"Successfully sent Telegram alert to {user.email}.")
-            return True
-        else:
-            print(f"Failed to send Telegram alert to {user.email}: {response.text}")
-            return False
-    except Exception as e:
-        print(f"Error sending Telegram alert: {e}")
-        return False
+    any_success = False
+    for cid in chat_ids:
+        payload = {
+            "chat_id": cid,
+            "text": message,
+            "parse_mode": "HTML"
+        }
+        try:
+            response = requests.post(url, json=payload, timeout=10)
+            if response.status_code == 200:
+                print(f"Successfully sent Telegram alert to {user.email} (Chat ID: {cid}).")
+                any_success = True
+            else:
+                print(f"Failed to send Telegram alert to {user.email} (Chat ID: {cid}): {response.text}")
+        except Exception as e:
+            print(f"Error sending Telegram alert to {user.email} (Chat ID: {cid}): {e}")
+            
+    return any_success
 
-def send_test_message(bot_token, chat_id):
+def send_test_message(bot_token, chat_id_str):
     """Sends a quick test message to verify Bot Token and Chat ID connection."""
+    chat_ids = [c.strip() for c in chat_id_str.split(',') if c.strip()]
+    if not chat_ids:
+        return False, "No valid chat IDs found."
+        
     message = (
         f"🔌 <b>NESCO Tracker Test Connection</b>\n\n"
         f"✅ Your Telegram Bot notification channel is now successfully configured! You will receive daily status updates here."
     )
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    payload = {
-        "chat_id": chat_id,
-        "text": message,
-        "parse_mode": "HTML"
-    }
-    try:
-        response = requests.post(url, json=payload, timeout=10)
-        return response.status_code == 200, response.text
-    except Exception as e:
-        return False, str(e)
+    
+    failures = []
+    success_count = 0
+    
+    for cid in chat_ids:
+        payload = {
+            "chat_id": cid,
+            "text": message,
+            "parse_mode": "HTML"
+        }
+        try:
+            response = requests.post(url, json=payload, timeout=10)
+            if response.status_code == 200:
+                success_count += 1
+            else:
+                failures.append(f"{cid} (Status {response.status_code}: {response.text[:100]})")
+        except Exception as e:
+            failures.append(f"{cid} (Error: {str(e)})")
+            
+    if failures:
+        err_msg = f"Sent to {success_count}/{len(chat_ids)} chats. Failed chats: " + ", ".join(failures)
+        return success_count > 0, err_msg
+    return True, "Test messages sent successfully to all chat IDs."
+

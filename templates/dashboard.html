@@ -106,10 +106,15 @@
                         </thead>
                         <tbody>
                             {% for usage in daily_usages %}
-                            <tr>
+                            <tr {% if usage.status != 'Normal' %}class="table-warning text-muted"{% endif %}>
                                 <td>{{ usage.date }}</td>
-                                <td class="fw-bold">৳ {{ "%.2f"|format(usage.balance) }}</td>
-                                <td class="text-danger fw-bold">৳ {{ "%.2f"|format(usage.usage) }}</td>
+                                <td class="fw-bold">{{ usage.balance }}</td>
+                                <td class="fw-bold {% if usage.status == 'Normal' %}text-danger{% endif %}">
+                                    {{ usage.usage }}
+                                    {% if usage.status != 'Normal' %}
+                                        <span class="badge bg-warning text-dark ms-2">{{ usage.status }}</span>
+                                    {% endif %}
+                                </td>
                             </tr>
                             {% else %}
                             <tr>

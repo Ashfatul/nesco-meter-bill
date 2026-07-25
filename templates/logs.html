@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 mt-2">
+    <div>
+        <h2 class="fw-bold mb-0">System Activity Logs</h2>
+        <p class="text-muted small mb-0">Track automatic background checks and manual refresh results for your meter.</p>
+    </div>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">
+        ← Back to Dashboard
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-lg-12">
+        <div class="card shadow-sm border-0 rounded-3">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" style="font-size: 0.95rem;">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="px-4 py-3 text-secondary" style="width: 25%;">Timestamp (BST)</th>
+                                <th class="py-3 text-secondary" style="width: 15%;">Status</th>
+                                <th class="py-3 text-secondary" style="width: 15%;">Source</th>
+                                <th class="py-3 px-4 text-secondary" style="width: 45%;">Execution Details</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in pagination.items %}
+                            <tr>
+                                <td class="px-4 py-3 fw-medium text-dark">
+                                    {{ log.timestamp_bst.strftime('%Y-%m-%d %I:%M:%S %p') }}
+                                </td>
+                                <td class="py-3">
+                                    {% if log.status == 'Success' %}
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill">
+                                            ● Success
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 rounded-pill">
+                                            ● Failed
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="py-3">
+                                    {% if log.source == 'Cron' %}
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 rounded-pill">
+                                            ⏰ Cron Job
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-info-subtle text-info border border-info-subtle px-3 py-2 rounded-pill">
+                                            👤 Manual
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="py-3 px-4 text-muted">
+                                    {{ log.details }}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center py-5 text-muted">
+                                    <div class="py-3">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="currentColor" class="bi bi-journal-x text-light-emphasis mb-3" viewBox="0 0 16 16">
+                                            <path d="M5.5 4a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1h-5zm0 2a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1h-5zm0 2a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1h-5z"/>
+                                            <path d="M3 0h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2zm0 1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H3z"/>
+                                        </svg>
+                                        <p class="mb-0">No system activity logged yet.</p>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Pagination Footer -->
+            {% if pagination.pages > 1 %}
+            <div class="card-footer bg-white border-0 py-3 d-flex justify-content-between align-items-center">
+                <span class="text-muted small">
+                    Page <strong>{{ pagination.page }}</strong> of {{ pagination.pages }} (Total Logs: {{ pagination.total }})
+                </span>
+                <nav aria-label="Logs navigation">
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('logs', page=pagination.prev_num) if pagination.has_prev else '#' }}">Previous</a>
+                        </li>
+                        {% for p in pagination.iter_pages(left_edge=2, left_current=2, right_current=3, right_edge=2) %}
+                            {% if p %}
+                                <li class="page-item {% if p == pagination.page %}active{% endif %}">
+                                    <a class="page-link" href="{{ url_for('logs', page=p) }}">{{ p }}</a>
+                                </li>
+                            {% else %}
+                                <li class="page-item disabled"><span class="page-link">...</span></li>
+                            {% endif %}
+                        {% endfor %}
+                        <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('logs', page=pagination.next_num) if pagination.has_next else '#' }}">Next</a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

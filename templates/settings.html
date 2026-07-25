@@ -58,10 +58,30 @@
                     <input type="hidden" name="action" value="update_telegram">
                     
                     <div class="mb-3">
-                        <label for="telegram_chat_id" class="form-label fw-semibold">Telegram Chat ID</label>
-                        <input type="text" class="form-control" id="telegram_chat_id" name="telegram_chat_id" 
-                               placeholder="e.g. 123456789" 
-                               value="{{ current_user.telegram_chat_id or '' }}">
+                        <label class="form-label fw-semibold">Telegram Chat IDs</label>
+                        <div id="telegram-ids-container">
+                            {% if current_user.telegram_chat_id %}
+                                {% for cid in current_user.telegram_chat_id.split(',') %}
+                                    {% if cid.strip() %}
+                                    <div class="input-group mb-2 chat-id-input-group">
+                                        <input type="text" class="form-control" name="telegram_chat_id" 
+                                               placeholder="e.g. 123456789" value="{{ cid.strip() }}">
+                                        <button type="button" class="btn btn-outline-danger remove-id-btn">Remove</button>
+                                    </div>
+                                    {% endif %}
+                                {% endfor %}
+                            {% else %}
+                                <div class="input-group mb-2 chat-id-input-group">
+                                    <input type="text" class="form-control" name="telegram_chat_id" 
+                                           placeholder="e.g. 123456789" value="">
+                                    <button type="button" class="btn btn-outline-danger remove-id-btn" style="display:none;">Remove</button>
+                                </div>
+                            {% endif %}
+                        </div>
+                        <button type="button" id="add-id-btn" class="btn btn-outline-secondary btn-sm mt-1 mb-3">
+                            + Add Another Chat ID
+                        </button>
+                        
                         <div class="form-text mt-2 text-muted">
                             To find your Chat ID:
                             <ol class="ps-3 mt-1 small">
@@ -72,14 +92,14 @@
                         </div>
                     </div>
                     <div class="d-grid">
-                        <button type="submit" class="btn btn-primary py-2 fw-semibold">Save Chat ID</button>
+                        <button type="submit" class="btn btn-primary py-2 fw-semibold">Save Chat IDs</button>
                     </div>
                 </form>
 
                 <!-- Test Connection Trigger -->
                 <div>
                     <label class="form-label fw-semibold mb-2">Test Telegram Notifications</label>
-                    <p class="text-muted small">Verify that the Telegram Bot can reach you. Make sure you have saved your Chat ID above and started a conversation with your bot first.</p>
+                    <p class="text-muted small">Verify that the Telegram Bot can reach you. Make sure you have saved your Chat IDs above and started a conversation with your bot first.</p>
                     <form method="POST" action="{{ url_for('test_telegram') }}">
                         <button type="submit" class="btn btn-outline-success py-2 w-100 fw-semibold" 
                                 {% if not current_user.telegram_chat_id or not bot_configured %}disabled{% endif %}>
@@ -97,3 +117,45 @@
     </div>
 </div>
 {% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const container = document.getElementById('telegram-ids-container');
+        const addBtn = document.getElementById('add-id-btn');
+        
+        function updateRemoveButtons() {
+            const groups = container.querySelectorAll('.chat-id-input-group');
+            groups.forEach(group => {
+                const btn = group.querySelector('.remove-id-btn');
+                if (groups.length <= 1) {
+                    btn.style.display = 'none';
+                } else {
+                    btn.style.display = 'block';
+                }
+            });
+        }
+        
+        addBtn.addEventListener('click', function() {
+            const newGroup = document.createElement('div');
+            newGroup.className = 'input-group mb-2 chat-id-input-group';
+            newGroup.innerHTML = `
+                <input type="text" class="form-control" name="telegram_chat_id" placeholder="e.g. 123456789" value="">
+                <button type="button" class="btn btn-outline-danger remove-id-btn">Remove</button>
+            `;
+            container.appendChild(newGroup);
+            updateRemoveButtons();
+        });
+        
+        container.addEventListener('click', function(e) {
+            if (e.target.classList.contains('remove-id-btn')) {
+                e.target.closest('.chat-id-input-group').remove();
+                updateRemoveButtons();
+            }
+        });
+        
+        updateRemoveButtons();
+    });
+</script>
+{% endblock %}
+

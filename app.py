@@ -41,6 +41,22 @@ login_manager.init_app(app)
 def load_user(user_id):
     return User.query.get(int(user_id))
 
+def log_fetch(user_id, status, details, source):
+    """Saves a fetch log entry in the database and cleans up old logs."""
+    try:
+        from models import FetchLog
+        # Keep only the last 200 logs per user to prevent DB bloat
+        old_logs = FetchLog.query.filter_by(user_id=user_id).order_by(FetchLog.timestamp.desc()).offset(200).all()
+        for old_log in old_logs:
+            db.session.delete(old_log)
+            
+        log = FetchLog(user_id=user_id, status=status, details=details, source=source)
+        db.session.add(log)
+        db.session.commit()
+    except Exception as e:
+        print(f"Error writing fetch log: {e}")
+
+
 @app.route('/')
 def index():
     if current_user.is_authenticated:
@@ -116,28 +132,68 @@ def dashboard():
     
     # Calculate daily usages (Difference between consecutive days)
     daily_usages = []
-    for i in range(len(balances) - 1):
-        # usage = previous day's balance - current day's balance
-        # (This is simplified; if recharges happened, they would need to be added)
-        usage = balances[i+1].balance - balances[i].balance
-        if usage < 0: 
-            usage = 0 # If negative, it means a recharge happened, so usage estimation is thrown off unless we factor recharge
-        daily_usages.append({
-            'date': balances[i].date.strftime('%Y-%m-%d'),
-            'balance': balances[i].balance,
-            'usage': usage
-        })
+    
+    if balances:
+        # Bangladesh timezone BST = UTC+6
+        today = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=6)).date()
+        earliest_date = balances[-1].date
+        
+        # Build a lookup dict
+        balances_by_date = {b.date: b for b in balances}
+        
+        # Generate list of dates from today down to earliest_date
+        curr_date = today
+        date_list = []
+        while curr_date >= earliest_date:
+            date_list.append(curr_date)
+            curr_date -= timedelta(days=1)
+            
+        for d in date_list:
+            if d in balances_by_date:
+                # Find the first recorded balance older than d
+                prev_b = None
+                for balance_rec in balances:
+                    if balance_rec.date < d:
+                        prev_b = balance_rec
+                        break
+                
+                usage = 0.0
+                if prev_b:
+                    usage = prev_b.balance - balances_by_date[d].balance
+                    if usage < 0:
+                        usage = 0.0  # recharge occurred
+                
+                daily_usages.append({
+                    'date': d.strftime('%Y-%m-%d'),
+                    'balance': f"৳ {balances_by_date[d].balance:.2f}",
+                    'usage': f"৳ {usage:.2f}",
+                    'usage_value': usage,
+                    'status': 'Normal'
+                })
+            else:
+                # Date has no recorded sync
+                daily_usages.append({
+                    'date': d.strftime('%Y-%m-%d'),
+                    'balance': 'N/A',
+                    'usage': 'N/A',
+                    'usage_value': 0.0,
+                    'status': 'Sync missing'
+                })
     
     # For yesterday usage, if not available show 'N/A'
-    yesterday_usage_display = f"৳ {daily_usages[0]['usage']:.2f}" if daily_usages else "N/A (Need 2 days of data)"
-    
+    yesterday_usage_display = "N/A (Need 2 days of data)"
+    normal_usages = [u for u in daily_usages if u['status'] == 'Normal']
+    if len(normal_usages) >= 1:
+        # normal_usages[0] corresponds to the latest date's usage (e.g. today's decrease compared to yesterday)
+        yesterday_usage_display = f"৳ {normal_usages[0]['usage_value']:.2f}"
+        
     # Calculate Average Daily Usage & Days Remaining
-    avg_daily_usage = sum(u['usage'] for u in daily_usages) / len(daily_usages) if daily_usages else 0.0
+    avg_daily_usage = sum(u['usage_value'] for u in normal_usages) / len(normal_usages) if normal_usages else 0.0
     days_remaining = int(current_balance / avg_daily_usage) if avg_daily_usage > 0 else 0
     
-    # Chart Data for Daily Usages (Reversed for chronological left-to-right display)
-    chart_daily_dates = [u['date'] for u in reversed(daily_usages)]
-    chart_daily_values = [u['usage'] for u in reversed(daily_usages)]
+    # Chart Data for Daily Usages (Reversed for chronological display, only for normal days)
+    chart_daily_dates = [u['date'] for u in reversed(normal_usages)]
+    chart_daily_values = [u['usage_value'] for u in reversed(normal_usages)]
     
     # Get last 12 months history
     from models import MonthlyUsage
@@ -235,11 +291,32 @@ def refresh_data():
                         print(f"Error parsing recharge date {r['date']}: {e}")
 
             db.session.commit()
+            log_fetch(current_user.id, "Success", f"Scraped balance: ৳ {data['current_balance']:.2f}. Manual refresh.", "Manual")
             flash('Data refreshed successfully.', 'success')
         else:
+            log_fetch(current_user.id, "Failed", "Failed to fetch data from NESCO panel.", "Manual")
             flash('Failed to fetch data from NESCO.', 'danger')
             
     return redirect(url_for('dashboard'))
+
+@app.route('/logs')
+@login_required
+def logs():
+    from models import FetchLog
+    page = request.args.get('page', 1, type=int)
+    # Paginate logs for current user (20 per page)
+    pagination = FetchLog.query.filter_by(user_id=current_user.id).order_by(FetchLog.timestamp.desc()).paginate(page=page, per_page=20)
+    
+    # Convert UTC times to BST (UTC+6) for frontend display
+    for log in pagination.items:
+        log.timestamp_bst = log.timestamp + timedelta(hours=6)
+        
+    return render_template('logs.html', pagination=pagination)
+
+@app.route('/sw.js')
+def service_worker():
+    return app.send_static_file('js/sw.js'), 200, {'Content-Type': 'application/javascript'}
+
 
 @app.route('/settings', methods=['GET', 'POST'])
 @login_required
@@ -249,12 +326,12 @@ def settings():
         action = request.form.get('action')
         
         if action == 'update_telegram':
-            telegram_chat_id = request.form.get('telegram_chat_id')
-            if telegram_chat_id:
-                telegram_chat_id = telegram_chat_id.strip()
-            current_user.telegram_chat_id = telegram_chat_id
+            chat_ids = request.form.getlist('telegram_chat_id')
+            cleaned_ids = [cid.strip() for cid in chat_ids if cid.strip()]
+            current_user.telegram_chat_id = ",".join(cleaned_ids) if cleaned_ids else None
             db.session.commit()
             flash('Telegram settings updated successfully!', 'success')
+
             
         elif action == 'update_meter':
             new_meter_number = request.form.get('meter_number')
@@ -359,22 +436,30 @@ def init_db():
                 # SQLite migrations
                 user_cols = [row[1] for row in db.session.execute(db.text("PRAGMA table_info(users)")).fetchall()]
                 if 'telegram_chat_id' not in user_cols:
-                    db.session.execute(db.text("ALTER TABLE users ADD COLUMN telegram_chat_id VARCHAR(100)"))
+                    db.session.execute(db.text("ALTER TABLE users ADD COLUMN telegram_chat_id TEXT"))
                     db.session.commit()
                 
                 meter_cols = [row[1] for row in db.session.execute(db.text("PRAGMA table_info(meters)")).fetchall()]
                 if 'last_synced' not in meter_cols:
                     db.session.execute(db.text("ALTER TABLE meters ADD COLUMN last_synced TIMESTAMP"))
                     db.session.commit()
+
+                balance_cols = [row[1] for row in db.session.execute(db.text("PRAGMA table_info(balances)")).fetchall()]
+                if 'telegram_sent' not in balance_cols:
+                    db.session.execute(db.text("ALTER TABLE balances ADD COLUMN telegram_sent BOOLEAN DEFAULT 0 NOT NULL"))
+                    db.session.commit()
             else:
                 # PostgreSQL (Supabase) migrations
-                db.session.execute(db.text("ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(100)"))
+                db.session.execute(db.text("ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id TEXT"))
+                db.session.execute(db.text("ALTER TABLE users ALTER COLUMN telegram_chat_id TYPE TEXT"))
                 db.session.execute(db.text("ALTER TABLE meters ADD COLUMN IF NOT EXISTS last_synced TIMESTAMP"))
+                db.session.execute(db.text("ALTER TABLE balances ADD COLUMN IF NOT EXISTS telegram_sent BOOLEAN DEFAULT FALSE NOT NULL"))
                 db.session.commit()
             print("Database self-healing columns verified successfully.")
         except Exception as e:
             db.session.rollback()
             print(f"Database self-healing migration skipped/failed: {e}")
+
 
 # Run database setup and migrations automatically on startup
 try:

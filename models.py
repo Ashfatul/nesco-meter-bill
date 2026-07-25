@@ -67,6 +67,7 @@ class Balance(db.Model):
     meter_id = db.Column(db.Integer, db.ForeignKey('meters.id'), nullable=False)
     date = db.Column(db.Date, nullable=False)
     balance = db.Column(db.Float, nullable=False)
+    telegram_sent = db.Column(db.Boolean, default=False, nullable=False)
     
     __table_args__ = (db.UniqueConstraint('meter_id', 'date', name='_meter_date_uc'),)
 
@@ -97,3 +98,16 @@ class MonthlyUsage(db.Model):
     used_energy_kwh = db.Column(db.Float)
     
     __table_args__ = (db.UniqueConstraint('meter_id', 'year', 'month', name='_meter_ym_uc'),)
+
+class FetchLog(db.Model):
+    __tablename__ = 'fetch_logs'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    status = db.Column(db.String(50), nullable=False) # 'Success' or 'Failed'
+    details = db.Column(db.Text)
+    source = db.Column(db.String(50)) # 'Cron' or 'Manual'
+    
+    # Relationship
+    user = db.relationship('User', backref=db.backref('fetch_logs', lazy=True, cascade='all, delete-orphan'))
+
