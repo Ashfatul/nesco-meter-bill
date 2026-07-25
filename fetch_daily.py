@@ -28,6 +28,14 @@ def run_daily_fetch():
             if check_requested_only and not meter.sync_requested:
                 continue
                 
+            # Skip automatic fetch if today's balance has already been successfully fetched
+            if not check_requested_only:
+                today = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=6)).date()
+                existing = Balance.query.filter_by(meter_id=meter.id, date=today).first()
+                if existing:
+                    print(f"[{datetime.now()}] Skipping automatic fetch for meter {meter.meter_number} - balance already successfully fetched for today ({today}).")
+                    continue
+                
             print(f"[{datetime.now()}] Fetching data for meter {meter.meter_number}...")
             scraper = NescoScraper()
             data = scraper.fetch_monthly_usage(meter.meter_number)
