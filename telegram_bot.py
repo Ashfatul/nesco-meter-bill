@@ -66,8 +66,19 @@ def send_test_message(bot_token, chat_id_str):
     if not chat_ids:
         return False, "No valid chat IDs found."
         
+    from datetime import datetime, timezone, timedelta
+    sync_time_bst = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=6))
+    sync_time_str = sync_time_bst.strftime('%Y-%m-%d %I:%M %p')
+    
     message = (
-        f"🔌 <b>NESCO Tracker Test Connection</b>\n\n"
+        f"🧪 <b>NESCO Meter Status Update [TEST CONNECTION]</b>\n"
+        f"📅 <b>As of:</b> {sync_time_str}\n\n"
+        f"👤 <b>Customer Name:</b> TEST CUSTOMER\n"
+        f"🔢 <b>Meter Number:</b> <code>1234567890</code>\n\n"
+        f"💰 <b>Current Balance:</b> ৳ 0.00\n"
+        f"📉 <b>Previous Day Usage:</b> ৳ 0.00\n"
+        f"📊 <b>Average Daily Usage:</b> ৳ 0.00\n"
+        f"📅 <b>Estimated Days Left:</b> 0 Days\n\n"
         f"✅ Your Telegram Bot notification channel is now successfully configured! You will receive daily status updates here."
     )
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
