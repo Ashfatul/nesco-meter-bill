@@ -21,8 +21,13 @@ def send_telegram_alert(user, meter):
     avg_daily_usage = metrics['avg_daily_usage']
     days_remaining = metrics['days_remaining']
     
+    from datetime import datetime, timezone, timedelta
+    sync_time_bst = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=6))
+    sync_time_str = sync_time_bst.strftime('%Y-%m-%d %I:%M %p')
+    
     message = (
-        f"🔌 <b>NESCO Meter Status Update</b>\n\n"
+        f"🔌 <b>NESCO Meter Status Update</b>\n"
+        f"📅 <b>As of:</b> {sync_time_str}\n\n"
         f"👤 <b>Customer Name:</b> {meter.customer_name or 'N/A'}\n"
         f"🔢 <b>Meter Number:</b> <code>{meter.meter_number}</code>\n\n"
         f"💰 <b>Current Balance:</b> ৳ {current_balance:.2f}\n"
