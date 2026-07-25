@@ -157,19 +157,27 @@ def dashboard():
                         prev_b = balance_rec
                         break
                 
-                usage = 0.0
                 if prev_b:
                     usage = prev_b.balance - balances_by_date[d].balance
                     if usage < 0:
                         usage = 0.0  # recharge occurred
-                
-                daily_usages.append({
-                    'date': d.strftime('%Y-%m-%d'),
-                    'balance': f"৳ {balances_by_date[d].balance:.2f}",
-                    'usage': f"৳ {usage:.2f}",
-                    'usage_value': usage,
-                    'status': 'Normal'
-                })
+                    
+                    daily_usages.append({
+                        'date': d.strftime('%Y-%m-%d'),
+                        'balance': f"৳ {balances_by_date[d].balance:.2f}",
+                        'usage': f"৳ {usage:.2f}",
+                        'usage_value': usage,
+                        'status': 'Normal'
+                    })
+                else:
+                    # Oldest balance in history has no older data to compare
+                    daily_usages.append({
+                        'date': d.strftime('%Y-%m-%d'),
+                        'balance': f"৳ {balances_by_date[d].balance:.2f}",
+                        'usage': 'N/A',
+                        'usage_value': 0.0,
+                        'status': 'Initial Balance'
+                    })
             else:
                 # Date has no recorded sync
                 daily_usages.append({
