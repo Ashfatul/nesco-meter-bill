@@ -28,13 +28,32 @@ def run_daily_fetch():
             if check_requested_only and not meter.sync_requested:
                 continue
                 
-            # Skip automatic fetch if today's balance has already been successfully fetched
+            # Skip automatic fetch if today's balance has already been successfully fetched and updated
             if not check_requested_only:
                 today = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=6)).date()
                 existing = Balance.query.filter_by(meter_id=meter.id, date=today).first()
                 if existing:
-                    print(f"[{datetime.now()}] Skipping automatic fetch for meter {meter.meter_number} - balance already successfully fetched for today ({today}).")
-                    continue
+                    # Find the latest balance record before today to check if today's balance is updated
+                    prev_balance_record = Balance.query.filter(
+                        Balance.meter_id == meter.id,
+                        Balance.date < today
+                    ).order_by(Balance.date.desc()).first()
+                    
+                    if prev_balance_record:
+                        yesterday_usage = prev_balance_record.balance - existing.balance
+                        recharge_made = existing.balance > prev_balance_record.balance
+                        usage_detected = yesterday_usage > 0.0
+                        
+                        # Only skip if the balance has updated (either a usage deduction > 0 or a recharge made)
+                        if usage_detected or recharge_made:
+                            print(f"[{datetime.now()}] Skipping automatic fetch for meter {meter.meter_number} - balance already successfully fetched and updated for today ({today}).")
+                            continue
+                        else:
+                            print(f"[{datetime.now()}] Today's recorded balance for meter {meter.meter_number} ({existing.balance}) matches yesterday's ({prev_balance_record.balance}). Stale balance detected; retrying fetch...")
+                    else:
+                        # First recorded balance in history, nothing to compare against, so skip
+                        print(f"[{datetime.now()}] Skipping automatic fetch for meter {meter.meter_number} - first balance entry recorded for today ({today}).")
+                        continue
                 
             print(f"[{datetime.now()}] Fetching data for meter {meter.meter_number}...")
             scraper = NescoScraper()

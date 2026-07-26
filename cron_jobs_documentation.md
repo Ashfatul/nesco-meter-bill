@@ -11,8 +11,8 @@ The fetch script `fetch_daily.py` supports two execution modes:
 ### A. Automated Daily Fetch (Full Scan)
 *   **Command:** `python fetch_daily.py`
 *   **Purpose:** Automatically scans all users in the database and updates their daily meter balances.
-*   **Rate-Limit Optimization (New):** Once a successful balance is received for a meter today, subsequent automated runs of this script will **automatically skip** fetching for that meter for the rest of the day. This prevents unnecessary scraping requests to the NESCO portal. If a fetch fails (e.g., due to NESCO site downtime), the script will retry on its next scheduled run until a successful balance is successfully recorded.
-*   **Recommended Frequency:** Run every **30 to 60 minutes** (e.g., between 4:00 AM and 11:30 PM local time). This acts as a reliable retry loop in case NESCO is offline early in the morning.
+*   **Rate-Limit Optimization (New):** Once today's balance has been successfully fetched and is updated (i.e., different from yesterday's balance, meaning yesterday's usage is deducted or a recharge is processed), subsequent automated runs of this script will **automatically skip** fetching for that meter for the rest of the day. This prevents unnecessary scraping requests to the NESCO portal. If the balance matches yesterday's (indicating NESCO's web portal has not yet updated the daily figures), or if a fetch fails, the script will continue retrying on its scheduled runs until the updated balance is retrieved.
+*   **Recommended Frequency:** Run every **30 to 60 minutes** (e.g., between 4:00 AM and 11:30 PM local time). This acts as a reliable retry loop until NESCO posts today's balance update.
 
 ### B. Manual Requested Fetch (Manual Flag System)
 *   **Command:** `python fetch_daily.py --check-requested`
