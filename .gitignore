@@ -117,6 +117,10 @@ venv.bak/
 *.db
 *.sqlite
 
+# Environment variables
+.env
+.env.example
+
 # Application logs
 *.log
 

@@ -1,7 +1,7 @@
 import sys
 import os
 from app import app, db, log_fetch
-from models import User, Meter, Balance
+from models import User, Meter, Balance, Recharge
 from scraper import NescoScraper
 from datetime import datetime, timezone, timedelta
 
@@ -134,6 +134,30 @@ def run_daily_fetch():
                     
                     log_fetch(user.id, "Success", details, "Cron")
                     print(f"[{datetime.now()}] Success: Updated balance to ৳ {current_val}. {details}")
+                    
+                # Fetch recharge history if balance changed or just regularly to keep it updated
+                if balance_changed:
+                    try:
+                        recharges = scraper.fetch_recharge_history(meter.meter_number)
+                        if recharges:
+                            for r in recharges:
+                                r_date = datetime.strptime(r['date'][:10], '%Y-%m-%d')
+                                existing_recharge = Recharge.query.filter_by(meter_id=meter.id, token=r['token']).first()
+                                if not existing_recharge:
+                                    new_recharge = Recharge(
+                                        meter_id=meter.id, 
+                                        date=r_date, 
+                                        amount=r['amount'], 
+                                        token=r['token'],
+                                        energy_cost=r.get('energy_cost', 0.0),
+                                        method=r.get('method', ''),
+                                        status=r.get('status', '')
+                                    )
+                                    db.session.add(new_recharge)
+                            db.session.commit()
+                            print(f"[{datetime.now()}] Success: Recharges updated for meter {meter.meter_number}.")
+                    except Exception as e:
+                        print(f"[{datetime.now()}] Error updating recharges: {e}")
             else:
                 details = f"Failed to fetch data from NESCO panel for meter: {meter.meter_number}."
                 log_fetch(user.id, "Failed", details, "Cron")

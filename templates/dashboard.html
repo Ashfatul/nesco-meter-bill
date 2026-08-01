@@ -110,6 +110,7 @@
                             <tr>
                                 <th>Date</th>
                                 <th>End of Day Balance (Tk)</th>
+                                <th>Other <sub>(VAT, etc)</sub></th>
                                 <th>Estimated Usage (Tk)</th>
                             </tr>
                         </thead>
@@ -118,6 +119,7 @@
                             <tr {% if usage.status != 'Normal' %}class="table-warning text-muted"{% endif %}>
                                 <td>{{ usage.date }}</td>
                                 <td class="fw-bold">{{ usage.balance }}</td>
+                                <td>{{ usage.other_cost }}</td>
                                 <td class="fw-bold {% if usage.status == 'Normal' %}text-danger{% endif %}">
                                     {{ usage.usage }}
                                     {% if usage.status != 'Normal' %}
@@ -127,7 +129,7 @@
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="3" class="text-center text-muted">No daily usages calculated yet. System needs at least 2 days of data.</td>
+                                <td colspan="4" class="text-center text-muted">No daily usages calculated yet. System needs at least 2 days of data.</td>
                             </tr>
                             {% endfor %}
                         </tbody>

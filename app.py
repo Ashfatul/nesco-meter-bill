@@ -152,25 +152,60 @@ def dashboard():
             date_list.append(curr_date)
             curr_date -= timedelta(days=1)
             
+        # First pass: calculate raw usage for each date and build a mapping
+        raw_usages = {}
         for d in date_list:
             if d in balances_by_date:
-                # Find the first recorded balance older than d
                 prev_b = None
                 for balance_rec in balances:
                     if balance_rec.date < d:
                         prev_b = balance_rec
                         break
-                
                 if prev_b:
-                    usage = prev_b.balance - balances_by_date[d].balance
+                    raw_usages[d] = prev_b.balance - balances_by_date[d].balance
+        
+        # Second pass: allocate recharges to the correct day
+        # Since recharge times are stripped (00:00:00), a recharge on date X could be before or after the daily balance scrape on date X.
+        # If it's before, the balance jumps on date X (raw_usage[X] < 0).
+        # If it's after, the balance jumps on date X+1 (raw_usage[X+1] < 0).
+        recharges_by_date = {}
+        other_costs_by_date = {}
+        for r in meter.recharges:
+            r_date = r.date.date()
+            next_date = r_date + timedelta(days=1)
+            
+            # Decide where to allocate this recharge
+            allocated_date = r_date
+            if raw_usages.get(next_date, 0) < 0 and raw_usages.get(r_date, 0) >= 0:
+                allocated_date = next_date
+                
+            energy_val = r.energy_cost if r.energy_cost else r.amount
+            other_val = r.amount - energy_val
+            
+            recharges_by_date[allocated_date] = recharges_by_date.get(allocated_date, 0.0) + energy_val
+            other_costs_by_date[allocated_date] = other_costs_by_date.get(allocated_date, 0.0) + other_val
+
+        # Third pass: build daily usages for frontend
+        for d in date_list:
+            if d in balances_by_date:
+                if d in raw_usages:
+                    usage = raw_usages[d]
+                    
+                    # Add intelligently allocated recharges
+                    if d in recharges_by_date:
+                        usage += recharges_by_date[d]
+                        
+                    other_cost = other_costs_by_date.get(d, 0.0)
+
                     if usage < 0:
-                        usage = 0.0  # recharge occurred
+                        usage = 0.0  # cap at 0 in case of minor sync discrepancies
                     
                     daily_usages.append({
                         'date': d.strftime('%Y-%m-%d'),
                         'balance': f"৳ {balances_by_date[d].balance:.2f}",
                         'usage': f"৳ {usage:.2f}",
                         'usage_value': usage,
+                        'other_cost': f"৳ {other_cost:.2f}" if other_cost > 0 else "-",
                         'status': 'Normal'
                     })
                 else:

@@ -1,6 +1,6 @@
 from extensions import db
 from flask_login import UserMixin
-from datetime import datetime
+from datetime import datetime, timedelta
 
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
@@ -44,9 +44,33 @@ class Meter(db.Model):
         
         current_balance = balances_sorted[0].balance
         
+        # Build raw usages first
+        raw_usages = {}
+        for i in range(len(balances_sorted) - 1):
+            curr_date = balances_sorted[i].date
+            raw_usages[curr_date] = balances_sorted[i+1].balance - balances_sorted[i].balance
+            
+        # Allocate recharges smartly
+        recharges_by_date = {}
+        for r in self.recharges:
+            r_date = r.date.date()
+            next_date = r_date + timedelta(days=1)
+            
+            allocated_date = r_date
+            if raw_usages.get(next_date, 0) < 0 and raw_usages.get(r_date, 0) >= 0:
+                allocated_date = next_date
+                
+            energy_val = r.energy_cost if r.energy_cost else r.amount
+            recharges_by_date[allocated_date] = recharges_by_date.get(allocated_date, 0.0) + energy_val
+
         daily_usages = []
         for i in range(len(balances_sorted) - 1):
-            usage = balances_sorted[i+1].balance - balances_sorted[i].balance
+            curr_date = balances_sorted[i].date
+            usage = raw_usages[curr_date]
+            
+            if curr_date in recharges_by_date:
+                usage += recharges_by_date[curr_date]
+                
             if usage < 0:
                 usage = 0.0
             daily_usages.append(usage)
