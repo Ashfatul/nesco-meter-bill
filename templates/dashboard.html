@@ -32,6 +32,22 @@
     </div>
 </div>
 
+<!-- Pending Recharge Alert Banner -->
+{% if pending_recharges %}
+<div class="alert alert-warning border-0 shadow-sm rounded-3 p-3 mb-4 d-flex align-items-center gap-3">
+    <div class="fs-2 text-warning">⏳</div>
+    <div>
+        <h6 class="fw-bold mb-1 text-dark">NESCO Meter Balance Sync Pending</h6>
+        <p class="mb-0 text-secondary small">
+            A recent recharge of <strong>৳ {{ "%.2f"|format(pending_recharges[0].amount) }}</strong> 
+            (Energy: <strong>৳ {{ "%.2f"|format(pending_recharges[0].energy_cost) }}</strong>) on 
+            <strong>{{ pending_recharges[0].date.strftime('%Y-%m-%d') }}</strong> was recorded. 
+            NESCO updates online balances periodically (usually once a day). The current balance below (<strong>৳ {{ "%.2f"|format(current_balance) }}</strong>) may temporarily show pre-recharge figures until NESCO credits it online.
+        </p>
+    </div>
+</div>
+{% endif %}
+
 <!-- Summary Cards -->
 <div class="row mb-4">
     <div class="col-md-3 mb-3">
@@ -42,6 +58,13 @@
                 <small class="d-block mt-1" style="font-size: 0.75rem; opacity: 0.85;">
                     Synced: {{ last_synced_bst.strftime('%Y-%m-%d %I:%M %p') if last_synced_bst else 'Never' }}
                 </small>
+                {% if pending_recharges %}
+                <div class="mt-2">
+                    <span class="badge bg-warning text-dark py-1 px-2" style="font-size: 0.75rem;">
+                        ⚠️ Pending Credit (+৳ {{ "%.2f"|format(pending_recharges[0].amount) }})
+                    </span>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -116,6 +139,24 @@
                         </thead>
                         <tbody>
                             {% for usage in daily_usages %}
+                            {% if usage.is_recharge_row %}
+                            <tr class="table-success bg-opacity-25 fw-semibold">
+                                <td>
+                                    <span class="badge bg-success me-1">💳 Recharge</span>
+                                    {{ usage.date }}
+                                </td>
+                                <td class="text-success fw-bold">{{ usage.balance }}</td>
+                                <td class="text-muted">{{ usage.other_cost }}</td>
+                                <td>
+                                    <span class="badge bg-success py-1 px-2">{{ usage.usage }} Energy</span>
+                                    {% if usage.status == 'Pending NESCO Credit' %}
+                                        <span class="badge bg-warning text-dark ms-1">⏳ Pending NESCO Credit</span>
+                                    {% else %}
+                                        <span class="badge bg-info text-dark ms-1">✓ Credited</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
                             <tr {% if usage.status != 'Normal' %}class="table-warning text-muted"{% endif %}>
                                 <td>{{ usage.date }}</td>
                                 <td class="fw-bold">{{ usage.balance }}</td>
@@ -127,6 +168,7 @@
                                     {% endif %}
                                 </td>
                             </tr>
+                            {% endif %}
                             {% else %}
                             <tr>
                                 <td colspan="4" class="text-center text-muted">No daily usages calculated yet. System needs at least 2 days of data.</td>

@@ -50,6 +50,50 @@ def send_telegram_alert(user, meter):
         f"📅 <b>Estimated Days Left:</b> {days_remaining} Days\n"
     )
     
+    # Check for recent recharges (within last 3 days)
+    today_bst = sync_time_bst.date()
+    balances_sorted = sorted(meter.balances, key=lambda x: x.date, reverse=True)
+    raw_usages = {}
+    for i in range(len(balances_sorted) - 1):
+        curr_date = balances_sorted[i].date
+        raw_usages[curr_date] = balances_sorted[i+1].balance - balances_sorted[i].balance
+        
+    recent_recharges = []
+    if meter.recharges:
+        recharges_sorted = sorted(meter.recharges, key=lambda x: x.date, reverse=True)
+        for r in recharges_sorted:
+            r_date = r.date.date()
+            if (today_bst - r_date).days <= 3:
+                recent_recharges.append(r)
+                
+    if recent_recharges:
+        message += "\n💳 <b>Recent Recharge Info:</b>\n"
+        for r in recent_recharges[:2]:
+            r_date = r.date.date()
+            energy_val = r.energy_cost if r.energy_cost else r.amount
+            
+            is_credited = False
+            for offset in range(7):
+                candidate = r_date + timedelta(days=offset)
+                if candidate in raw_usages and raw_usages[candidate] < 0:
+                    is_credited = True
+                    break
+                    
+            r_date_str = r.date.strftime('%Y-%m-%d')
+            message += (
+                f"  • <b>Paid:</b> ৳ {r.amount:.2f} | <b>Energy:</b> ৳ {energy_val:.2f}\n"
+                f"    <b>Date:</b> {r_date_str}"
+            )
+            if r.token:
+                message += f" | <b>Token:</b> <code>{r.token}</code>\n"
+            else:
+                message += "\n"
+                
+            if not is_credited:
+                message += "    ⏳ <i>Status: Pending NESCO online balance credit (will update soon)</i>\n"
+            else:
+                message += "    ✓ <i>Status: Credited to meter balance</i>\n"
+                
     if current_balance < 50.0:
         message += f"\n⚠️ <b>LOW BALANCE WARNING:</b> Your balance is below ৳ 50.00! Please recharge immediately."
         

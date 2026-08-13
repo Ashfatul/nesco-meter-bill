@@ -137,6 +137,7 @@ def dashboard():
     # Calculate daily usages (Difference between consecutive days)
     daily_usages = []
     
+    pending_recharges = []
     if balances:
         # Bangladesh timezone BST = UTC+6
         today = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=6)).date()
@@ -164,76 +165,102 @@ def dashboard():
                 if prev_b:
                     raw_usages[d] = prev_b.balance - balances_by_date[d].balance
         
-        # Second pass: allocate recharges to the correct day
-        # Since recharge times are stripped (00:00:00), a recharge on date X could be before or after the daily balance scrape on date X.
-        # If it's before, the balance jumps on date X (raw_usage[X] < 0).
-        # If it's after, the balance jumps on date X+1 (raw_usage[X+1] < 0).
+        # Second pass: allocate recharges to dates where NESCO balance actually jumped (raw_usage < 0)
+        credited_recharges_by_date = {}
         recharges_by_date = {}
         other_costs_by_date = {}
-        for r in meter.recharges:
+        recharges_sorted = sorted(meter.recharges, key=lambda x: x.date)
+        for r in recharges_sorted:
             r_date = r.date.date()
-            next_date = r_date + timedelta(days=1)
-            
-            # Decide where to allocate this recharge
-            allocated_date = r_date
-            if raw_usages.get(next_date, 0) < 0 and raw_usages.get(r_date, 0) >= 0:
-                allocated_date = next_date
+            if r_date < earliest_date - timedelta(days=1):
+                continue
                 
             energy_val = r.energy_cost if r.energy_cost else r.amount
             other_val = r.amount - energy_val
             
-            recharges_by_date[allocated_date] = recharges_by_date.get(allocated_date, 0.0) + energy_val
-            other_costs_by_date[allocated_date] = other_costs_by_date.get(allocated_date, 0.0) + other_val
+            target_date = None
+            for offset in range(7):
+                candidate = r_date + timedelta(days=offset)
+                if candidate in raw_usages and raw_usages[candidate] < 0:
+                    target_date = candidate
+                    break
+                    
+            if target_date:
+                if target_date not in credited_recharges_by_date:
+                    credited_recharges_by_date[target_date] = []
+                credited_recharges_by_date[target_date].append(r)
+                recharges_by_date[target_date] = recharges_by_date.get(target_date, 0.0) + energy_val
+                other_costs_by_date[target_date] = other_costs_by_date.get(target_date, 0.0) + other_val
+            else:
+                if (today - r_date).days <= 7:
+                    pending_recharges.append(r)
+                other_costs_by_date[r_date] = other_costs_by_date.get(r_date, 0.0) + other_val
 
-        # Third pass: build daily usages for frontend
+        # Third pass: build daily usages list with distinct recharge rows inserted
         for d in date_list:
+            recharges_on_d = [r for r in recharges_sorted if r.date.date() == d and r.date.date() >= earliest_date - timedelta(days=1)]
+            for r in recharges_on_d:
+                energy_val = r.energy_cost if r.energy_cost else r.amount
+                other_val = r.amount - energy_val
+                is_pending = r in pending_recharges
+                daily_usages.append({
+                    'date': d.strftime('%Y-%m-%d'),
+                    'is_recharge_row': True,
+                    'balance': f"+ ৳ {r.amount:.2f}",
+                    'other_cost': f"৳ {other_val:.2f}" if other_val > 0 else "-",
+                    'usage': f"+ ৳ {energy_val:.2f}",
+                    'usage_value': energy_val,
+                    'status': 'Pending NESCO Credit' if is_pending else 'Recharge Credited',
+                    'token': r.token,
+                    'method': r.method
+                })
+
             if d in balances_by_date:
                 if d in raw_usages:
                     usage = raw_usages[d]
-                    
-                    # Add intelligently allocated recharges
                     if d in recharges_by_date:
                         usage += recharges_by_date[d]
-                        
-                    other_cost = other_costs_by_date.get(d, 0.0)
-
                     if usage < 0:
-                        usage = 0.0  # cap at 0 in case of minor sync discrepancies
+                        usage = 0.0
                     
                     daily_usages.append({
                         'date': d.strftime('%Y-%m-%d'),
+                        'is_recharge_row': False,
                         'balance': f"৳ {balances_by_date[d].balance:.2f}",
                         'usage': f"৳ {usage:.2f}",
                         'usage_value': usage,
-                        'other_cost': f"৳ {other_cost:.2f}" if other_cost > 0 else "-",
+                        'other_cost': "-",
                         'status': 'Normal'
                     })
                 else:
                     # Oldest balance in history has no older data to compare
                     daily_usages.append({
                         'date': d.strftime('%Y-%m-%d'),
+                        'is_recharge_row': False,
                         'balance': f"৳ {balances_by_date[d].balance:.2f}",
                         'usage': 'N/A',
                         'usage_value': 0.0,
+                        'other_cost': "-",
                         'status': 'Initial Balance'
                     })
             else:
                 # Date has no recorded sync
                 daily_usages.append({
                     'date': d.strftime('%Y-%m-%d'),
+                    'is_recharge_row': False,
                     'balance': 'N/A',
                     'usage': 'N/A',
                     'usage_value': 0.0,
+                    'other_cost': "-",
                     'status': 'Sync missing'
                 })
-        # Slice to show only latest 31 days
-        daily_usages = daily_usages[:31]
+        # Slice to show only latest 50 rows
+        daily_usages = daily_usages[:50]
     
-    # For yesterday usage, if not available show 'N/A'
+    # For yesterday usage, filter out recharge rows and get normal usages
     yesterday_usage_display = "N/A (Need 2 days of data)"
-    normal_usages = [u for u in daily_usages if u['status'] == 'Normal']
+    normal_usages = [u for u in daily_usages if not u.get('is_recharge_row') and u['status'] == 'Normal']
     if len(normal_usages) >= 1:
-        # normal_usages[0] corresponds to the latest date's usage (e.g. today's decrease compared to yesterday)
         yesterday_usage_display = f"৳ {normal_usages[0]['usage_value']:.2f}"
         
     # Calculate Average Daily Usage & Days Remaining
@@ -242,7 +269,7 @@ def dashboard():
     
     # Chart Data for Daily Usages (Reversed for chronological display, only for normal days)
     chart_daily_dates = [u['date'] for u in reversed(normal_usages)]
-    chart_daily_values = [u['usage_value'] for u in reversed(normal_usages)]
+    chart_daily_values = [round(u['usage_value'], 2) for u in reversed(normal_usages)]
     
     # Get last 12 months history
     from models import MonthlyUsage
@@ -265,6 +292,7 @@ def dashboard():
                            avg_daily_usage=avg_daily_usage,
                            days_remaining=days_remaining,
                            daily_usages=daily_usages,
+                           pending_recharges=pending_recharges,
                            monthly_usages=monthly_usages,
                            chart_daily_dates=chart_daily_dates,
                            chart_daily_values=chart_daily_values,

@@ -43,25 +43,35 @@ class Meter(db.Model):
             }
         
         current_balance = balances_sorted[0].balance
+        earliest_date = balances_sorted[-1].date
         
-        # Build raw usages first
+        # Build raw usages map first (prev_balance - curr_balance)
         raw_usages = {}
         for i in range(len(balances_sorted) - 1):
             curr_date = balances_sorted[i].date
             raw_usages[curr_date] = balances_sorted[i+1].balance - balances_sorted[i].balance
             
-        # Allocate recharges smartly
+        # Allocate recharges: a recharge is allocated to the first date (on or after r_date)
+        # where raw_usages < 0 (i.e. where NESCO credited the balance and caused a balance jump).
+        # If NESCO hasn't credited the balance jump yet (raw_usages >= 0), the recharge is not added to usage calculations yet.
         recharges_by_date = {}
-        for r in self.recharges:
+        recharges_sorted = sorted(self.recharges, key=lambda x: x.date)
+        for r in recharges_sorted:
             r_date = r.date.date()
-            next_date = r_date + timedelta(days=1)
-            
-            allocated_date = r_date
-            if raw_usages.get(next_date, 0) < 0 and raw_usages.get(r_date, 0) >= 0:
-                allocated_date = next_date
+            if r_date < earliest_date - timedelta(days=1):
+                continue
                 
             energy_val = r.energy_cost if r.energy_cost else r.amount
-            recharges_by_date[allocated_date] = recharges_by_date.get(allocated_date, 0.0) + energy_val
+            
+            target_date = None
+            for offset in range(7):
+                candidate = r_date + timedelta(days=offset)
+                if candidate in raw_usages and raw_usages[candidate] < 0:
+                    target_date = candidate
+                    break
+                    
+            if target_date:
+                recharges_by_date[target_date] = recharges_by_date.get(target_date, 0.0) + energy_val
 
         daily_usages = []
         for i in range(len(balances_sorted) - 1):
