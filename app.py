@@ -390,7 +390,12 @@ def settings():
         
         if action == 'update_telegram':
             chat_ids = request.form.getlist('telegram_chat_id')
-            cleaned_ids = [cid.strip() for cid in chat_ids if cid.strip()]
+            cleaned_ids = []
+            for cid in chat_ids:
+                parts = [p.strip() for p in re.split(r'[\s,;\n]+', cid) if p.strip()]
+                for p in parts:
+                    if p not in cleaned_ids:
+                        cleaned_ids.append(p)
             current_user.telegram_chat_id = ",".join(cleaned_ids) if cleaned_ids else None
             db.session.commit()
             flash('Telegram settings updated successfully!', 'success')
@@ -453,11 +458,13 @@ def test_telegram():
         return redirect(url_for('settings'))
         
     from telegram_bot import send_test_message
-    success, error_msg = send_test_message(bot_token, chat_id)
-    if success:
-        flash('Test message sent successfully! Check your Telegram chat.', 'success')
+    success, msg = send_test_message(bot_token, chat_id)
+    if success and "Failures:" not in msg:
+        flash(msg, 'success')
+    elif success:
+        flash(f'Partial Success: {msg}', 'warning')
     else:
-        flash(f'Failed to send test message: {error_msg}', 'danger')
+        flash(f'Failed to send test message: {msg}', 'danger')
         
     return redirect(url_for('settings'))
 

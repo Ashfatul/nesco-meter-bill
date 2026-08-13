@@ -1,5 +1,19 @@
 import os
 import requests
+import re
+
+def parse_chat_ids(chat_id_str):
+    """Parses and sanitizes comma/whitespace separated Telegram chat IDs."""
+    if not chat_id_str:
+        return []
+    raw_ids = [c.strip() for c in re.split(r'[\s,;\n]+', chat_id_str) if c.strip()]
+    seen = set()
+    cleaned = []
+    for cid in raw_ids:
+        if cid not in seen:
+            seen.add(cid)
+            cleaned.append(cid)
+    return cleaned
 
 def send_telegram_alert(user, meter):
     """Formats and sends daily balance status to all configured Telegram Chat IDs."""
@@ -10,7 +24,7 @@ def send_telegram_alert(user, meter):
         print(f"Skipping Telegram notification for User {user.email}: TELEGRAM_BOT_TOKEN or telegram_chat_id not configured.")
         return False
         
-    chat_ids = [c.strip() for c in chat_id_str.split(',') if c.strip()]
+    chat_ids = parse_chat_ids(chat_id_str)
     if not chat_ids:
         print(f"Skipping Telegram notification for User {user.email}: No valid chat IDs found.")
         return False
@@ -41,7 +55,8 @@ def send_telegram_alert(user, meter):
         
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     
-    any_success = False
+    success_count = 0
+    total_chats = len(chat_ids)
     for cid in chat_ids:
         payload = {
             "chat_id": cid,
@@ -52,17 +67,18 @@ def send_telegram_alert(user, meter):
             response = requests.post(url, json=payload, timeout=10)
             if response.status_code == 200:
                 print(f"Successfully sent Telegram alert to {user.email} (Chat ID: {cid}).")
-                any_success = True
+                success_count += 1
             else:
                 print(f"Failed to send Telegram alert to {user.email} (Chat ID: {cid}): {response.text}")
         except Exception as e:
             print(f"Error sending Telegram alert to {user.email} (Chat ID: {cid}): {e}")
             
-    return any_success
+    print(f"Telegram alert summary for {user.email}: {success_count}/{total_chats} messages sent successfully.")
+    return success_count > 0
 
 def send_test_message(bot_token, chat_id_str):
     """Sends a quick test message to verify Bot Token and Chat ID connection."""
-    chat_ids = [c.strip() for c in chat_id_str.split(',') if c.strip()]
+    chat_ids = parse_chat_ids(chat_id_str)
     if not chat_ids:
         return False, "No valid chat IDs found."
         
@@ -97,12 +113,21 @@ def send_test_message(bot_token, chat_id_str):
             if response.status_code == 200:
                 success_count += 1
             else:
-                failures.append(f"{cid} (Status {response.status_code}: {response.text[:100]})")
+                try:
+                    res_json = response.json()
+                    err_detail = res_json.get('description', response.text[:100])
+                except Exception:
+                    err_detail = response.text[:100]
+                hint = ""
+                if "chat not found" in err_detail.lower() or "bot was blocked" in err_detail.lower():
+                    hint = " (Make sure this Telegram account has started a chat with the bot by sending /start)"
+                failures.append(f"Chat ID '{cid}': {err_detail}{hint}")
         except Exception as e:
-            failures.append(f"{cid} (Error: {str(e)})")
+            failures.append(f"Chat ID '{cid}': {str(e)}")
             
     if failures:
-        err_msg = f"Sent to {success_count}/{len(chat_ids)} chats. Failed chats: " + ", ".join(failures)
+        err_msg = f"Sent to {success_count}/{len(chat_ids)} chats. Failures: " + "; ".join(failures)
         return success_count > 0, err_msg
-    return True, "Test messages sent successfully to all chat IDs."
+    return True, f"Test message sent successfully to all {success_count} chat ID(s)."
+
 

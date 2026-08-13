@@ -7,7 +7,7 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
-    telegram_chat_id = db.Column(db.String(100))
+    telegram_chat_id = db.Column(db.Text)
     
     # Relationships
     meters = db.relationship('Meter', backref='user', lazy=True)
