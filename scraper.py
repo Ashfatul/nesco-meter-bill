@@ -150,19 +150,42 @@ class NescoScraper:
                         a_tag = cols[2].find('a')
                         if a_tag and a_tag.has_attr('data-token'):
                             token_val = a_tag['data-token']
+                        elif cols[2].get_text(strip=True):
+                            token_val = cols[2].get_text(strip=True)
                             
+                        def parse_float(val_str, default=0.0):
+                            if not val_str:
+                                return default
+                            clean = val_str.replace(',', '').strip()
+                            try:
+                                return float(clean)
+                            except (ValueError, TypeError):
+                                return default
+
                         try:
                             # NESCO date format: 08-JUL-2026 6:18 PM
                             parsed_date = datetime.strptime(date_str, '%d-%b-%Y %I:%M %p')
-                            amount = float(amount_str.replace(',', ''))
-                            energy_cost = float(cols[9].get_text(strip=True).replace(',', '')) if cols[9].get_text(strip=True) else 0.0
-                            method = cols[12].get_text(strip=True)
-                            status = cols[14].get_text(strip=True)
+                            amount = parse_float(amount_str)
+                            meter_rent = parse_float(cols[3].get_text(strip=True)) if len(cols) > 3 else 0.0
+                            demand_charge = parse_float(cols[4].get_text(strip=True)) if len(cols) > 4 else 0.0
+                            pfc_charge = parse_float(cols[5].get_text(strip=True)) if len(cols) > 5 else 0.0
+                            vat = parse_float(cols[6].get_text(strip=True)) if len(cols) > 6 else 0.0
+                            arrears = parse_float(cols[7].get_text(strip=True)) if len(cols) > 7 else 0.0
+                            rebate = parse_float(cols[8].get_text(strip=True)) if len(cols) > 8 else 0.0
+                            energy_cost = parse_float(cols[9].get_text(strip=True)) if len(cols) > 9 else 0.0
+                            method = cols[12].get_text(strip=True) if len(cols) > 12 else ''
+                            status = cols[14].get_text(strip=True) if len(cols) > 14 else ''
                             
                             recharges.append({
                                 'date': parsed_date.strftime('%Y-%m-%d %H:%M:%S'), 
                                 'amount': amount,
                                 'token': token_val,
+                                'meter_rent': meter_rent,
+                                'demand_charge': demand_charge,
+                                'pfc_charge': pfc_charge,
+                                'vat': vat,
+                                'arrears': arrears,
+                                'rebate': rebate,
                                 'energy_cost': energy_cost,
                                 'method': method,
                                 'status': status

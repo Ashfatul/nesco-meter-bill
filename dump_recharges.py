@@ -20,6 +20,6 @@ engine = create_engine(db_url)
 
 with engine.connect() as conn:
     print("=== RECHARGES ===")
-    result = conn.execute(text("SELECT date, amount, energy_cost FROM recharges ORDER BY date DESC LIMIT 10"))
+    result = conn.execute(text("SELECT date, amount, energy_cost, arrears, vat, meter_rent, demand_charge, rebate FROM recharges ORDER BY date DESC LIMIT 10"))
     for row in result:
-        print(f"{row[0]}: amount={row[1]}, energy_cost={row[2]}")
+        print(f"{row[0]}: amount={row[1]}, energy_cost={row[2]}, arrears (neg bal)={row[3]}, vat={row[4]}, rent={row[5]}, demand={row[6]}, rebate={row[7]}")

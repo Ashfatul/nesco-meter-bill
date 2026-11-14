@@ -7,7 +7,7 @@ from flask import Flask, render_template, redirect, url_for, flash, request
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import login_user, login_required, logout_user, current_user
 from extensions import db, login_manager
-from models import User, Meter, Balance, Recharge
+from models import User, Meter, Balance, Recharge, MonthlyUsage
 from scraper import NescoScraper
 from datetime import datetime, timezone, timedelta
 
@@ -40,6 +40,31 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
 login_manager.init_app(app)
+
+def ensure_db_schema():
+    with app.app_context():
+        try:
+            db.create_all()
+            from sqlalchemy import inspect, text
+            inspector = inspect(db.engine)
+            if 'recharges' in inspector.get_table_names():
+                existing_cols = {c['name'] for c in inspector.get_columns('recharges')}
+                new_cols = {
+                    'meter_rent': 'FLOAT DEFAULT 0.0',
+                    'demand_charge': 'FLOAT DEFAULT 0.0',
+                    'pfc_charge': 'FLOAT DEFAULT 0.0',
+                    'vat': 'FLOAT DEFAULT 0.0',
+                    'arrears': 'FLOAT DEFAULT 0.0',
+                    'rebate': 'FLOAT DEFAULT 0.0',
+                }
+                with db.engine.begin() as conn:
+                    for col_name, col_type in new_cols.items():
+                        if col_name not in existing_cols:
+                            conn.execute(text(f"ALTER TABLE recharges ADD COLUMN {col_name} {col_type}"))
+        except Exception as e:
+            print(f"Error ensuring DB schema: {e}")
+
+ensure_db_schema()
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -128,32 +153,43 @@ def register():
 @login_required
 def dashboard():
     meter = Meter.query.filter_by(user_id=current_user.id).first()
+    if not meter:
+        flash('Please configure your meter number in Settings first.', 'warning')
+        return redirect(url_for('settings'))
+
+    month_order = {'January': 1, 'February': 2, 'March': 3, 'April': 4, 'May': 5, 'June': 6, 'July': 7, 'August': 8, 'September': 9, 'October': 10, 'November': 11, 'December': 12}
+    month_order_rev = {v: k for k, v in month_order.items()}
     
     # Get all balances ordered by date descending
     balances = Balance.query.filter_by(meter_id=meter.id).order_by(Balance.date.desc()).all()
-    
     current_balance = balances[0].balance if balances else 0.0
     
-    # Calculate daily usages (Difference between consecutive days)
-    daily_usages = []
+    # Bangladesh timezone BST = UTC+6
+    today = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=6)).date()
+    today_month_str = today.strftime('%Y-%m')
     
+    # Recharges & Monthly Usages
+    recharges_all = sorted(meter.recharges, key=lambda x: x.date, reverse=True)
+    recharges_asc = sorted(meter.recharges, key=lambda x: x.date)
+    monthly_usages_query = MonthlyUsage.query.filter_by(meter_id=meter.id).all()
+    all_monthly_usages = sorted(monthly_usages_query, key=lambda x: (x.year, month_order.get(x.month, 0)), reverse=True)
+
+    # 1. Build all daily usages across all tracked history
+    all_daily_usages = []
     pending_recharges = []
+    
     if balances:
-        # Bangladesh timezone BST = UTC+6
-        today = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=6)).date()
         earliest_date = balances[-1].date
-        
-        # Build a lookup dict
         balances_by_date = {b.date: b for b in balances}
         
-        # Generate list of dates from today down to earliest_date
+        # Generate full date sequence from today down to earliest_date
         curr_date = today
         date_list = []
         while curr_date >= earliest_date:
             date_list.append(curr_date)
             curr_date -= timedelta(days=1)
             
-        # First pass: calculate raw usage for each date and build a mapping
+        # First pass: calculate raw daily usages
         raw_usages = {}
         for d in date_list:
             if d in balances_by_date:
@@ -164,13 +200,13 @@ def dashboard():
                         break
                 if prev_b:
                     raw_usages[d] = prev_b.balance - balances_by_date[d].balance
-        
+                    
         # Second pass: allocate recharges to dates where NESCO balance actually jumped (raw_usage < 0)
         credited_recharges_by_date = {}
         recharges_by_date = {}
         other_costs_by_date = {}
-        recharges_sorted = sorted(meter.recharges, key=lambda x: x.date)
-        for r in recharges_sorted:
+        
+        for r in recharges_asc:
             r_date = r.date.date()
             if r_date < earliest_date - timedelta(days=1):
                 continue
@@ -198,24 +234,37 @@ def dashboard():
 
         # Third pass: build daily usages list with distinct recharge rows inserted
         for d in date_list:
-            recharges_on_d = [r for r in recharges_sorted if r.date.date() == d and r.date.date() >= earliest_date - timedelta(days=1)]
+            d_month_str = d.strftime('%Y-%m')
+            recharges_on_d = [r for r in recharges_asc if r.date.date() == d and r.date.date() >= earliest_date - timedelta(days=1)]
             for r in recharges_on_d:
                 energy_val = r.energy_cost if r.energy_cost else r.amount
                 other_val = r.amount - energy_val
+                arrears_val = getattr(r, 'arrears', 0.0) or 0.0
+                other_fees_val = max(0.0, other_val - arrears_val)
                 is_pending = r in pending_recharges
-                daily_usages.append({
+                all_daily_usages.append({
                     'date': d.strftime('%Y-%m-%d'),
+                    'date_obj': d,
+                    'month_str': d_month_str,
                     'is_recharge_row': True,
                     'balance': f"+ ৳ {r.amount:.2f}",
+                    'balance_val': None,
                     'other_cost': f"৳ {other_val:.2f}" if other_val > 0 else "-",
+                    'arrears': arrears_val,
+                    'other_fees': other_fees_val,
+                    'vat': getattr(r, 'vat', 0.0) or 0.0,
+                    'meter_rent': getattr(r, 'meter_rent', 0.0) or 0.0,
+                    'demand_charge': getattr(r, 'demand_charge', 0.0) or 0.0,
                     'usage': f"+ ৳ {energy_val:.2f}",
                     'usage_value': energy_val,
                     'status': 'Pending NESCO Credit' if is_pending else 'Recharge Credited',
                     'token': r.token,
-                    'method': r.method
+                    'method': r.method,
+                    'recharge': r
                 })
 
             if d in balances_by_date:
+                b_val = balances_by_date[d].balance
                 if d in raw_usages:
                     usage = raw_usages[d]
                     if d in recharges_by_date:
@@ -223,10 +272,13 @@ def dashboard():
                     if usage < 0:
                         usage = 0.0
                     
-                    daily_usages.append({
+                    all_daily_usages.append({
                         'date': d.strftime('%Y-%m-%d'),
+                        'date_obj': d,
+                        'month_str': d_month_str,
                         'is_recharge_row': False,
-                        'balance': f"৳ {balances_by_date[d].balance:.2f}",
+                        'balance': f"৳ {b_val:.2f}",
+                        'balance_val': b_val,
                         'usage': f"৳ {usage:.2f}",
                         'usage_value': usage,
                         'other_cost': "-",
@@ -234,71 +286,232 @@ def dashboard():
                     })
                 else:
                     # Oldest balance in history has no older data to compare
-                    daily_usages.append({
+                    all_daily_usages.append({
                         'date': d.strftime('%Y-%m-%d'),
+                        'date_obj': d,
+                        'month_str': d_month_str,
                         'is_recharge_row': False,
-                        'balance': f"৳ {balances_by_date[d].balance:.2f}",
+                        'balance': f"৳ {b_val:.2f}",
+                        'balance_val': b_val,
                         'usage': 'N/A',
                         'usage_value': 0.0,
                         'other_cost': "-",
                         'status': 'Initial Balance'
                     })
             else:
-                # Date has no recorded sync
-                daily_usages.append({
+                all_daily_usages.append({
                     'date': d.strftime('%Y-%m-%d'),
+                    'date_obj': d,
+                    'month_str': d_month_str,
                     'is_recharge_row': False,
                     'balance': 'N/A',
+                    'balance_val': None,
                     'usage': 'N/A',
                     'usage_value': 0.0,
                     'other_cost': "-",
                     'status': 'Sync missing'
                 })
-        # Slice to show only latest 50 rows
-        daily_usages = daily_usages[:50]
-    
-    # For yesterday usage, filter out recharge rows and get normal usages
-    yesterday_usage_display = "N/A (Need 2 days of data)"
-    normal_usages = [u for u in daily_usages if not u.get('is_recharge_row') and u['status'] == 'Normal']
-    if len(normal_usages) >= 1:
-        yesterday_usage_display = f"৳ {normal_usages[0]['usage_value']:.2f}"
-        
-    # Calculate Average Daily Usage & Days Remaining
-    avg_daily_usage = sum(u['usage_value'] for u in normal_usages) / len(normal_usages) if normal_usages else 0.0
-    days_remaining = int(current_balance / avg_daily_usage) if avg_daily_usage > 0 else 0
-    
-    # Chart Data for Daily Usages (Reversed for chronological display, only for normal days)
-    chart_daily_dates = [u['date'] for u in reversed(normal_usages)]
-    chart_daily_values = [round(u['usage_value'], 2) for u in reversed(normal_usages)]
-    
-    # Get last 12 months history
-    from models import MonthlyUsage
-    monthly_usages_query = MonthlyUsage.query.filter_by(meter_id=meter.id).all()
-    
-    month_order = {'January': 1, 'February': 2, 'March': 3, 'April': 4, 'May': 5, 'June': 6, 'July': 7, 'August': 8, 'September': 9, 'October': 10, 'November': 11, 'December': 12}
-    monthly_usages = sorted(monthly_usages_query, key=lambda x: (x.year, month_order.get(x.month, 0)), reverse=True)[:12]
 
-    # Chart Data for Monthly Usages
-    chart_monthly_labels = [f"{u.month} {u.year}" for u in reversed(monthly_usages)]
-    chart_monthly_values = [u.total_usage_tk for u in reversed(monthly_usages)]
+    # 2. Extract all available months (from balances, recharges, and monthly usages)
+    b_months = set(b.date.strftime('%Y-%m') for b in balances)
+    r_months = set(r.date.strftime('%Y-%m') for r in recharges_asc)
+    mu_months = set(f"{mu.year}-{month_order.get(mu.month, 1):02d}" for mu in all_monthly_usages)
+    all_month_keys = sorted(b_months.union(r_months).union(mu_months), reverse=True)
+    if not all_month_keys:
+        all_month_keys = [today_month_str]
 
-    # Calculate last sync time in BST (+6 hours) for display
+    # Build available_months list with readable labels
+    available_months = []
+    for m_key in all_month_keys:
+        try:
+            m_dt = datetime.strptime(m_key, '%Y-%m')
+            label = m_dt.strftime('%B %Y')
+        except Exception:
+            label = m_key
+        available_months.append({
+            'key': m_key,
+            'label': label,
+            'is_current': (m_key == today_month_str)
+        })
+
+    # Determine selected month from request args, default to current month or latest available
+    req_month = request.args.get('month')
+    if req_month and req_month in all_month_keys:
+        selected_month = req_month
+    elif today_month_str in all_month_keys:
+        selected_month = today_month_str
+    else:
+        selected_month = all_month_keys[0]
+
+    # Prev and Next month navigation keys
+    idx = all_month_keys.index(selected_month)
+    next_month = all_month_keys[idx - 1] if idx > 0 else None
+    prev_month = all_month_keys[idx + 1] if idx < len(all_month_keys) - 1 else None
+
+    def get_month_label(m_key):
+        if not m_key:
+            return ""
+        try:
+            return datetime.strptime(m_key, '%Y-%m').strftime('%b %Y')
+        except Exception:
+            return m_key
+
+    prev_month_label = get_month_label(prev_month)
+    next_month_label = get_month_label(next_month)
+
+    try:
+        selected_month_label = datetime.strptime(selected_month, '%Y-%m').strftime('%B %Y')
+    except Exception:
+        selected_month_label = selected_month
+
+    is_selected_current = (selected_month == today_month_str)
+
+    # 3. Filter daily usages & recharges for the SELECTED MONTH
+    month_daily_usages = [u for u in all_daily_usages if u['month_str'] == selected_month]
+    month_normal_usages = [u for u in month_daily_usages if not u['is_recharge_row'] and u['status'] == 'Normal']
+    
+    month_total_usage = sum(u['usage_value'] for u in month_normal_usages)
+    month_days_recorded = len(month_normal_usages)
+    month_avg_daily_usage = (month_total_usage / month_days_recorded) if month_days_recorded > 0 else 0.0
+
+    month_peak = max(month_normal_usages, key=lambda x: x['usage_value']) if month_normal_usages else None
+    month_peak_usage = month_peak['usage_value'] if month_peak else 0.0
+    month_peak_date = month_peak['date'] if month_peak else None
+
+    # Recharges belonging to the selected month
+    month_recharges = [r for r in recharges_all if r.date.strftime('%Y-%m') == selected_month]
+    month_total_recharge = sum(r.amount for r in month_recharges)
+    month_energy_recharge = sum(r.energy_cost or 0.0 for r in month_recharges)
+    month_fees_recharge = month_total_recharge - month_energy_recharge
+    month_arrears_recharge = sum(getattr(r, 'arrears', 0.0) or 0.0 for r in month_recharges)
+
+    # Yesterday usage and days remaining (if viewing current month)
+    yesterday_usage_display = None
+    days_remaining = None
+    month_end_balance = None
+
+    if is_selected_current:
+        if month_normal_usages:
+            yesterday_usage_display = f"৳ {month_normal_usages[0]['usage_value']:.2f}"
+        else:
+            yesterday_usage_display = "N/A"
+        days_remaining = int(current_balance / month_avg_daily_usage) if month_avg_daily_usage > 0 else 0
+    else:
+        # Find latest recorded balance of this historical month
+        hist_balances = [u for u in month_daily_usages if not u['is_recharge_row'] and u.get('balance_val') is not None]
+        month_end_balance = hist_balances[0]['balance_val'] if hist_balances else None
+
+    # Check for official NESCO MonthlyUsage record for selected month
+    sel_parts = selected_month.split('-')
+    sel_year = int(sel_parts[0])
+    sel_month_num = int(sel_parts[1])
+    sel_month_name = month_order_rev.get(sel_month_num, '')
+    official_month_usage = next((m for m in all_monthly_usages if m.year == sel_year and m.month == sel_month_name), None)
+
+    # Chart data for selected month (chronological order)
+    chart_month_dates = [u['date'] for u in reversed(month_normal_usages)]
+    chart_month_values = [round(u['usage_value'], 2) for u in reversed(month_normal_usages)]
+
+    # 4. OVERALL WHOLE-DATA RECORDS & LIFETIME STATS
+    # All-time recharges
+    overall_total_recharge_amt = sum(r.amount for r in recharges_all)
+    overall_total_energy_cost = sum(r.energy_cost or 0.0 for r in recharges_all)
+    overall_total_fees = overall_total_recharge_amt - overall_total_energy_cost
+    overall_total_arrears = sum(getattr(r, 'arrears', 0.0) or 0.0 for r in recharges_all)
+    overall_recharge_count = len(recharges_all)
+    overall_avg_recharge_amt = (overall_total_recharge_amt / overall_recharge_count) if overall_recharge_count > 0 else 0.0
+
+    # All-time tracked daily usages
+    all_normal_usages = [u for u in all_daily_usages if not u['is_recharge_row'] and u['status'] == 'Normal']
+    overall_total_daily_usage = sum(u['usage_value'] for u in all_normal_usages)
+    overall_tracked_days = len(all_normal_usages)
+    overall_avg_daily_usage = (overall_total_daily_usage / overall_tracked_days) if overall_tracked_days > 0 else 0.0
+    overall_peak_day = max(all_normal_usages, key=lambda x: x['usage_value']) if all_normal_usages else None
+
+    # Earliest & latest tracked dates
+    earliest_tracked_date = balances[-1].date if balances else None
+    latest_tracked_date = balances[0].date if balances else None
+
+    # Official monthly statements aggregate
+    overall_official_billed_tk = sum(m.total_usage_tk or 0.0 for m in all_monthly_usages)
+    overall_official_kwh = sum(m.used_energy_kwh or 0.0 for m in all_monthly_usages)
+    overall_official_months_count = len(all_monthly_usages)
+    overall_avg_monthly_bill = (overall_official_billed_tk / overall_official_months_count) if overall_official_months_count > 0 else 0.0
+    overall_avg_monthly_kwh = (overall_official_kwh / overall_official_months_count) if overall_official_months_count > 0 else 0.0
+
+    highest_usage_month = max(all_monthly_usages, key=lambda x: x.total_usage_tk or 0.0) if all_monthly_usages else None
+    lowest_usage_month = min(all_monthly_usages, key=lambda x: x.total_usage_tk or 999999.0) if all_monthly_usages else None
+
+    # Overall Monthly Chart Data
+    chart_overall_labels = [f"{u.month[:3]} '{str(u.year)[2:]}" for u in reversed(all_monthly_usages)]
+    chart_overall_values_tk = [round(u.total_usage_tk or 0.0, 2) for u in reversed(all_monthly_usages)]
+    chart_overall_values_kwh = [round(u.used_energy_kwh or 0.0, 2) for u in reversed(all_monthly_usages)]
+
+    # Active tab parameter ('monthly' or 'overall')
+    active_tab = request.args.get('tab', 'monthly')
+    if active_tab not in ['monthly', 'overall']:
+        active_tab = 'monthly'
+
+    # BST last synced time
     last_synced_bst = meter.last_synced + timedelta(hours=6) if meter.last_synced else None
 
     return render_template('dashboard.html', 
                            meter=meter, 
                            current_balance=current_balance,
-                           yesterday_usage_display=yesterday_usage_display,
-                           avg_daily_usage=avg_daily_usage,
-                           days_remaining=days_remaining,
-                           daily_usages=daily_usages,
+                           last_synced_bst=last_synced_bst,
                            pending_recharges=pending_recharges,
-                           monthly_usages=monthly_usages,
-                           chart_daily_dates=chart_daily_dates,
-                           chart_daily_values=chart_daily_values,
-                           chart_monthly_labels=chart_monthly_labels,
-                           chart_monthly_values=chart_monthly_values,
-                           last_synced_bst=last_synced_bst)
+                           active_tab=active_tab,
+                           # Month-wise context
+                           available_months=available_months,
+                           selected_month=selected_month,
+                           selected_month_label=selected_month_label,
+                           is_selected_current=is_selected_current,
+                           prev_month=prev_month,
+                           prev_month_label=prev_month_label,
+                           next_month=next_month,
+                           next_month_label=next_month_label,
+                           month_daily_usages=month_daily_usages,
+                           month_total_usage=month_total_usage,
+                           month_days_recorded=month_days_recorded,
+                           month_avg_daily_usage=month_avg_daily_usage,
+                           month_peak_usage=month_peak_usage,
+                           month_peak_date=month_peak_date,
+                           month_total_recharge=month_total_recharge,
+                           month_energy_recharge=month_energy_recharge,
+                           month_fees_recharge=month_fees_recharge,
+                           month_arrears_recharge=month_arrears_recharge,
+                           month_recharges=month_recharges,
+                           yesterday_usage_display=yesterday_usage_display,
+                           days_remaining=days_remaining,
+                           month_end_balance=month_end_balance,
+                           official_month_usage=official_month_usage,
+                           chart_month_dates=chart_month_dates,
+                           chart_month_values=chart_month_values,
+                           # Overall context
+                           overall_total_recharge_amt=overall_total_recharge_amt,
+                           overall_total_energy_cost=overall_total_energy_cost,
+                           overall_total_fees=overall_total_fees,
+                           overall_total_arrears=overall_total_arrears,
+                           overall_recharge_count=overall_recharge_count,
+                           overall_avg_recharge_amt=overall_avg_recharge_amt,
+                           overall_total_daily_usage=overall_total_daily_usage,
+                           overall_tracked_days=overall_tracked_days,
+                           overall_avg_daily_usage=overall_avg_daily_usage,
+                           overall_peak_day=overall_peak_day,
+                           earliest_tracked_date=earliest_tracked_date,
+                           latest_tracked_date=latest_tracked_date,
+                           overall_official_billed_tk=overall_official_billed_tk,
+                           overall_official_kwh=overall_official_kwh,
+                           overall_official_months_count=overall_official_months_count,
+                           overall_avg_monthly_bill=overall_avg_monthly_bill,
+                           overall_avg_monthly_kwh=overall_avg_monthly_kwh,
+                           highest_usage_month=highest_usage_month,
+                           lowest_usage_month=lowest_usage_month,
+                           all_monthly_usages=all_monthly_usages,
+                           chart_overall_labels=chart_overall_labels,
+                           chart_overall_values_tk=chart_overall_values_tk,
+                           chart_overall_values_kwh=chart_overall_values_kwh,
+                           all_recharges=recharges_all)
 
 @app.route('/refresh_data')
 @login_required
@@ -359,11 +572,28 @@ def refresh_data():
                                 date=r_date, 
                                 amount=r['amount'], 
                                 token=r['token'],
+                                meter_rent=r.get('meter_rent', 0.0),
+                                demand_charge=r.get('demand_charge', 0.0),
+                                pfc_charge=r.get('pfc_charge', 0.0),
+                                vat=r.get('vat', 0.0),
+                                arrears=r.get('arrears', 0.0),
+                                rebate=r.get('rebate', 0.0),
                                 energy_cost=r.get('energy_cost', 0.0),
                                 method=r.get('method', ''),
                                 status=r.get('status', '')
                             )
                             db.session.add(new_recharge)
+                        else:
+                            existing.amount = r['amount']
+                            existing.energy_cost = r.get('energy_cost', existing.energy_cost)
+                            existing.meter_rent = r.get('meter_rent', 0.0)
+                            existing.demand_charge = r.get('demand_charge', 0.0)
+                            existing.pfc_charge = r.get('pfc_charge', 0.0)
+                            existing.vat = r.get('vat', 0.0)
+                            existing.arrears = r.get('arrears', 0.0)
+                            existing.rebate = r.get('rebate', 0.0)
+                            existing.method = r.get('method', existing.method)
+                            existing.status = r.get('status', existing.status)
                     except Exception as e:
                         print(f"Error parsing recharge date {r['date']}: {e}")
 

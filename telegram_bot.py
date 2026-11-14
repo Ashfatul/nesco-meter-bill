@@ -80,8 +80,17 @@ def send_telegram_alert(user, meter):
                     break
                     
             r_date_str = r.date.strftime('%Y-%m-%d')
+            arrears_val = getattr(r, 'arrears', 0.0) or 0.0
+            other_fees = max(0.0, (r.amount - energy_val) - arrears_val)
+            
+            recharge_line = f"  • <b>Paid:</b> ৳ {r.amount:.2f} | <b>Energy:</b> ৳ {energy_val:.2f}"
+            if arrears_val > 0:
+                recharge_line += f" | <b>Paid Neg Bal:</b> ৳ {arrears_val:.2f}"
+            if other_fees > 0:
+                recharge_line += f" | <b>Fees:</b> ৳ {other_fees:.2f}"
+                
             message += (
-                f"  • <b>Paid:</b> ৳ {r.amount:.2f} | <b>Energy:</b> ৳ {energy_val:.2f}\n"
+                f"{recharge_line}\n"
                 f"    <b>Date:</b> {r_date_str}"
             )
             if r.token:

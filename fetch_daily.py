@@ -149,11 +149,28 @@ def run_daily_fetch():
                                         date=r_date, 
                                         amount=r['amount'], 
                                         token=r['token'],
+                                        meter_rent=r.get('meter_rent', 0.0),
+                                        demand_charge=r.get('demand_charge', 0.0),
+                                        pfc_charge=r.get('pfc_charge', 0.0),
+                                        vat=r.get('vat', 0.0),
+                                        arrears=r.get('arrears', 0.0),
+                                        rebate=r.get('rebate', 0.0),
                                         energy_cost=r.get('energy_cost', 0.0),
                                         method=r.get('method', ''),
                                         status=r.get('status', '')
                                     )
                                     db.session.add(new_recharge)
+                                else:
+                                    existing_recharge.amount = r['amount']
+                                    existing_recharge.energy_cost = r.get('energy_cost', existing_recharge.energy_cost)
+                                    existing_recharge.meter_rent = r.get('meter_rent', 0.0)
+                                    existing_recharge.demand_charge = r.get('demand_charge', 0.0)
+                                    existing_recharge.pfc_charge = r.get('pfc_charge', 0.0)
+                                    existing_recharge.vat = r.get('vat', 0.0)
+                                    existing_recharge.arrears = r.get('arrears', 0.0)
+                                    existing_recharge.rebate = r.get('rebate', 0.0)
+                                    existing_recharge.method = r.get('method', existing_recharge.method)
+                                    existing_recharge.status = r.get('status', existing_recharge.status)
                             db.session.commit()
                             print(f"[{datetime.now()}] Success: Recharges updated for meter {meter.meter_number}.")
                     except Exception as e:
