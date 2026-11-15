@@ -20,14 +20,18 @@ from urllib.parse import quote_plus
 # Dynamically fetch database URI from environment, defaulting to SQLite
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///nesco.db')
 
-if db_url and (db_url.startswith("postgres://") or db_url.startswith("postgresql://")):
-    # Standardize scheme
+if db_url and (db_url.startswith("postgres://") or db_url.startswith("postgresql://") or db_url.startswith("postgresql+")):
+    # Standardize scheme to postgresql+psycopg2 to use psycopg2 driver
     if db_url.startswith("postgres://"):
-        db_url = db_url.replace("postgres://", "postgresql://", 1)
+        db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+    elif db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    elif db_url.startswith("postgresql+psycopg://"):
+        db_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg2://", 1)
         
     # Match scheme, username, password, host/port, and database path
     # This correctly parses passwords containing '@' or other special characters
-    match = re.match(r"^(postgresql://)([^:]+):(.*)@([^@/]+)(/.*)?$", db_url)
+    match = re.match(r"^(postgresql(?:\+[a-zA-Z0-9_]+)?://)([^:]+):(.*)@([^@/]+)(/.*)?$", db_url)
     if match:
         scheme, username, password, hostinfo, path = match.groups()
         # Avoid double-encoding if it's already encoded (contains '%')
