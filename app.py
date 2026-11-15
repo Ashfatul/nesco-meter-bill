@@ -435,6 +435,11 @@ def dashboard():
     # Official monthly statements aggregate
     overall_official_billed_tk = sum(m.total_usage_tk or 0.0 for m in all_monthly_usages)
     overall_official_kwh = sum(m.used_energy_kwh or 0.0 for m in all_monthly_usages)
+    overall_official_recharge = sum(m.total_recharge or 0.0 for m in all_monthly_usages)
+    overall_official_electricity_tk = sum(m.used_electricity_tk or 0.0 for m in all_monthly_usages)
+    overall_official_meter_rent = sum(m.meter_rent or 0.0 for m in all_monthly_usages)
+    overall_official_demand_charge = sum(m.demand_charge or 0.0 for m in all_monthly_usages)
+    overall_official_vat = sum(m.vat or 0.0 for m in all_monthly_usages)
     overall_official_months_count = len(all_monthly_usages)
     overall_avg_monthly_bill = (overall_official_billed_tk / overall_official_months_count) if overall_official_months_count > 0 else 0.0
     overall_avg_monthly_kwh = (overall_official_kwh / overall_official_months_count) if overall_official_months_count > 0 else 0.0
@@ -502,6 +507,11 @@ def dashboard():
                            latest_tracked_date=latest_tracked_date,
                            overall_official_billed_tk=overall_official_billed_tk,
                            overall_official_kwh=overall_official_kwh,
+                           overall_official_recharge=overall_official_recharge,
+                           overall_official_electricity_tk=overall_official_electricity_tk,
+                           overall_official_meter_rent=overall_official_meter_rent,
+                           overall_official_demand_charge=overall_official_demand_charge,
+                           overall_official_vat=overall_official_vat,
                            overall_official_months_count=overall_official_months_count,
                            overall_avg_monthly_bill=overall_avg_monthly_bill,
                            overall_avg_monthly_kwh=overall_avg_monthly_kwh,

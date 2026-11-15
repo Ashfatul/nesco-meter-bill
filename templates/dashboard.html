@@ -67,10 +67,10 @@
     <div>
         <h6 class="fw-bold mb-1 text-dark">NESCO Meter Balance Sync Pending</h6>
         <p class="mb-0 text-secondary small">
-            A recent recharge of <strong>৳ {{ "%.2f"|format(pending_recharges[0].amount) }}</strong> 
-            (Energy: <strong>৳ {{ "%.2f"|format(pending_recharges[0].energy_cost) }}</strong>{% if pending_recharges[0].arrears and pending_recharges[0].arrears > 0 %}, Paid Negative Balance: <strong>৳ {{ "%.2f"|format(pending_recharges[0].arrears) }}</strong>{% endif %}) on 
+            A recent recharge of <strong>৳ {{ "%.2f"|format(pending_recharges[0].amount or 0.0) }}</strong> 
+            (Energy: <strong>৳ {{ "%.2f"|format(pending_recharges[0].energy_cost or 0.0) }}</strong>{% if pending_recharges[0].arrears and pending_recharges[0].arrears > 0 %}, Paid Negative Balance: <strong>৳ {{ "%.2f"|format(pending_recharges[0].arrears or 0.0) }}</strong>{% endif %}) on 
             <strong>{{ pending_recharges[0].date.strftime('%Y-%m-%d') }}</strong> was recorded. 
-            NESCO updates online balances periodically. The live balance below (<strong>৳ {{ "%.2f"|format(current_balance) }}</strong>) will update once NESCO credits it online.
+            NESCO updates online balances periodically. The live balance below (<strong>৳ {{ "%.2f"|format(current_balance or 0.0) }}</strong>) will update once NESCO credits it online.
         </p>
     </div>
 </div>
@@ -81,7 +81,7 @@
     <div class="card-body p-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
         <div>
             <div class="text-uppercase text-white-50 small fw-bold" style="letter-spacing: 0.5px;">Live Meter Balance</div>
-            <div class="display-6 fw-bold mb-0">৳ {{ "%.2f"|format(current_balance) }}</div>
+            <div class="display-6 fw-bold mb-0">৳ {{ "%.2f"|format(current_balance or 0.0) }}</div>
             <div class="text-white-50 small mt-1">
                 Last Synced: <strong>{{ last_synced_bst.strftime('%Y-%m-%d %I:%M %p') if last_synced_bst else 'Never' }} BST</strong>
             </div>
@@ -89,7 +89,7 @@
         <div class="d-flex flex-column align-items-end gap-1">
             {% if pending_recharges %}
             <span class="badge bg-warning text-dark px-3 py-2 fw-semibold">
-                ⚠️ Pending Credit: +৳ {{ "%.2f"|format(pending_recharges[0].amount) }}
+                ⚠️ Pending Credit: +৳ {{ "%.2f"|format(pending_recharges[0].amount or 0.0) }}
             </span>
             {% endif %}
             <span class="badge bg-white bg-opacity-25 text-white px-3 py-2">
@@ -180,7 +180,7 @@
                 <div class="card shadow-sm border-0 h-100 rounded-3 bg-white border-start border-danger border-4">
                     <div class="card-body">
                         <span class="text-uppercase text-muted small fw-bold d-block mb-1">Month's Total Usage</span>
-                        <h3 class="fw-bold text-danger mb-0">৳ {{ "%.2f"|format(month_total_usage) }}</h3>
+                        <h3 class="fw-bold text-danger mb-0">৳ {{ "%.2f"|format(month_total_usage or 0.0) }}</h3>
                         <small class="text-muted d-block mt-1">
                             {% if month_days_recorded > 0 %}
                             Electricity used across {{ month_days_recorded }} recorded days
@@ -197,7 +197,7 @@
                 <div class="card shadow-sm border-0 h-100 rounded-3 bg-white border-start border-primary border-4">
                     <div class="card-body">
                         <span class="text-uppercase text-muted small fw-bold d-block mb-1">Avg. Daily Cost</span>
-                        <h3 class="fw-bold text-primary mb-0">৳ {{ "%.2f"|format(month_avg_daily_usage) }}</h3>
+                        <h3 class="fw-bold text-primary mb-0">৳ {{ "%.2f"|format(month_avg_daily_usage or 0.0) }}</h3>
                         <small class="text-muted d-block mt-1">Average cost per recorded day</small>
                     </div>
                 </div>
@@ -208,9 +208,9 @@
                 <div class="card shadow-sm border-0 h-100 rounded-3 bg-white border-start border-success border-4">
                     <div class="card-body">
                         <span class="text-uppercase text-muted small fw-bold d-block mb-1">Month's Recharges</span>
-                        <h3 class="fw-bold text-success mb-0">৳ {{ "%.2f"|format(month_total_recharge) }}</h3>
+                        <h3 class="fw-bold text-success mb-0">৳ {{ "%.2f"|format(month_total_recharge or 0.0) }}</h3>
                         <small class="text-muted d-block mt-1">
-                            {{ month_recharges|length }} recharge(s) (Energy: ৳ {{ "%.2f"|format(month_energy_recharge) }})
+                            {{ month_recharges|length }} recharge(s) (Energy: ৳ {{ "%.2f"|format(month_energy_recharge or 0.0) }})
                         </small>
                     </div>
                 </div>
@@ -223,10 +223,10 @@
                         {% if is_selected_current %}
                         <span class="text-uppercase text-muted small fw-bold d-block mb-1">Est. Days Remaining</span>
                         <h3 class="fw-bold text-dark mb-0">{{ days_remaining }} Days</h3>
-                        <small class="text-muted d-block mt-1">Based on Nov avg (৳ {{ "%.2f"|format(month_avg_daily_usage) }}/day)</small>
+                        <small class="text-muted d-block mt-1">Based on {{ selected_month_label }} avg (৳ {{ "%.2f"|format(month_avg_daily_usage or 0.0) }}/day)</small>
                         {% else %}
                         <span class="text-uppercase text-muted small fw-bold d-block mb-1">Peak Single-Day Usage</span>
-                        <h3 class="fw-bold text-dark mb-0">৳ {{ "%.2f"|format(month_peak_usage) }}</h3>
+                        <h3 class="fw-bold text-dark mb-0">৳ {{ "%.2f"|format(month_peak_usage or 0.0) }}</h3>
                         <small class="text-muted d-block mt-1">
                             {% if month_peak_date %}On {{ month_peak_date }}{% else %}No peak recorded{% endif %}
                         </small>
@@ -249,27 +249,27 @@
                 <div class="row g-2 text-center text-md-start">
                     <div class="col-6 col-md-2">
                         <span class="text-muted small d-block">Total Billed</span>
-                        <strong class="text-dark">৳ {{ "%.2f"|format(official_month_usage.total_usage_tk) }}</strong>
+                        <strong class="text-dark">৳ {{ "%.2f"|format(official_month_usage.total_usage_tk or 0.0) }}</strong>
                     </div>
                     <div class="col-6 col-md-2">
                         <span class="text-muted small d-block">Energy Consumed</span>
-                        <strong class="text-success">{{ "%.2f"|format(official_month_usage.used_energy_kwh) }} kWh</strong>
+                        <strong class="text-success">{{ "%.2f"|format(official_month_usage.used_energy_kwh or 0.0) }} kWh</strong>
                     </div>
                     <div class="col-6 col-md-2">
                         <span class="text-muted small d-block">Electricity Cost</span>
-                        <strong class="text-dark">৳ {{ "%.2f"|format(official_month_usage.used_electricity_tk) }}</strong>
+                        <strong class="text-dark">৳ {{ "%.2f"|format(official_month_usage.used_electricity_tk or 0.0) }}</strong>
                     </div>
                     <div class="col-6 col-md-2">
                         <span class="text-muted small d-block">Meter Rent</span>
-                        <span class="text-muted">৳ {{ "%.2f"|format(official_month_usage.meter_rent) }}</span>
+                        <span class="text-muted">৳ {{ "%.2f"|format(official_month_usage.meter_rent or 0.0) }}</span>
                     </div>
                     <div class="col-6 col-md-2">
                         <span class="text-muted small d-block">Demand Charge</span>
-                        <span class="text-muted">৳ {{ "%.2f"|format(official_month_usage.demand_charge) }}</span>
+                        <span class="text-muted">৳ {{ "%.2f"|format(official_month_usage.demand_charge or 0.0) }}</span>
                     </div>
                     <div class="col-6 col-md-2">
                         <span class="text-muted small d-block">VAT</span>
-                        <span class="text-muted">৳ {{ "%.2f"|format(official_month_usage.vat) }}</span>
+                        <span class="text-muted">৳ {{ "%.2f"|format(official_month_usage.vat or 0.0) }}</span>
                     </div>
                 </div>
             </div>
@@ -373,11 +373,11 @@
                         <tfoot class="table-light fw-bold text-center">
                             <tr>
                                 <td>Total for {{ selected_month_label }}</td>
-                                <td>Recharged: <span class="text-success">৳ {{ "%.2f"|format(month_total_recharge) }}</span></td>
-                                <td>Fees: <span class="text-muted">৳ {{ "%.2f"|format(month_fees_recharge) }}</span></td>
+                                <td>Recharged: <span class="text-success">৳ {{ "%.2f"|format(month_total_recharge or 0.0) }}</span></td>
+                                <td>Fees: <span class="text-muted">৳ {{ "%.2f"|format(month_fees_recharge or 0.0) }}</span></td>
                                 <td class="text-danger">
-                                    Total Usage: ৳ {{ "%.2f"|format(month_total_usage) }}
-                                    <span class="text-muted fw-normal small ms-2">(Avg: ৳ {{ "%.2f"|format(month_avg_daily_usage) }}/day)</span>
+                                    Total Usage: ৳ {{ "%.2f"|format(month_total_usage or 0.0) }}
+                                    <span class="text-muted fw-normal small ms-2">(Avg: ৳ {{ "%.2f"|format(month_avg_daily_usage or 0.0) }}/day)</span>
                                 </td>
                             </tr>
                         </tfoot>
@@ -470,9 +470,9 @@
                 <div class="card shadow-sm border-0 h-100 rounded-3 bg-white border-start border-success border-4">
                     <div class="card-body">
                         <span class="text-uppercase text-muted small fw-bold d-block mb-1">Lifetime Recharges</span>
-                        <h3 class="fw-bold text-success mb-0">৳ {{ "%.2f"|format(overall_total_recharge_amt) }}</h3>
+                        <h3 class="fw-bold text-success mb-0">৳ {{ "%.2f"|format(overall_total_recharge_amt or 0.0) }}</h3>
                         <small class="text-muted d-block mt-1">
-                            {{ overall_recharge_count }} total transactions (Avg ৳ {{ "%.2f"|format(overall_avg_recharge_amt) }})
+                            {{ overall_recharge_count }} total transactions (Avg ৳ {{ "%.2f"|format(overall_avg_recharge_amt or 0.0) }})
                         </small>
                     </div>
                 </div>
@@ -483,7 +483,7 @@
                 <div class="card shadow-sm border-0 h-100 rounded-3 bg-white border-start border-danger border-4">
                     <div class="card-body">
                         <span class="text-uppercase text-muted small fw-bold d-block mb-1">Tracked Daily Usage</span>
-                        <h3 class="fw-bold text-danger mb-0">৳ {{ "%.2f"|format(overall_total_daily_usage) }}</h3>
+                        <h3 class="fw-bold text-danger mb-0">৳ {{ "%.2f"|format(overall_total_daily_usage or 0.0) }}</h3>
                         <small class="text-muted d-block mt-1">
                             Across {{ overall_tracked_days }} daily logs since {{ earliest_tracked_date }}
                         </small>
@@ -496,7 +496,7 @@
                 <div class="card shadow-sm border-0 h-100 rounded-3 bg-white border-start border-primary border-4">
                     <div class="card-body">
                         <span class="text-uppercase text-muted small fw-bold d-block mb-1">Lifetime Daily Avg</span>
-                        <h3 class="fw-bold text-primary mb-0">৳ {{ "%.2f"|format(overall_avg_daily_usage) }} / day</h3>
+                        <h3 class="fw-bold text-primary mb-0">৳ {{ "%.2f"|format(overall_avg_daily_usage or 0.0) }} / day</h3>
                         <small class="text-muted d-block mt-1">All-time true average daily cost</small>
                     </div>
                 </div>
@@ -507,9 +507,9 @@
                 <div class="card shadow-sm border-0 h-100 rounded-3 bg-white border-start border-info border-4">
                     <div class="card-body">
                         <span class="text-uppercase text-muted small fw-bold d-block mb-1">Official Billed Total</span>
-                        <h3 class="fw-bold text-info-emphasis mb-0">৳ {{ "%.2f"|format(overall_official_billed_tk) }}</h3>
+                        <h3 class="fw-bold text-info-emphasis mb-0">৳ {{ "%.2f"|format(overall_official_billed_tk or 0.0) }}</h3>
                         <small class="text-muted d-block mt-1">
-                            {{ overall_official_months_count }} statements (Avg ৳ {{ "%.2f"|format(overall_avg_monthly_bill) }}/mo)
+                            {{ overall_official_months_count }} statements (Avg ৳ {{ "%.2f"|format(overall_avg_monthly_bill or 0.0) }}/mo)
                         </small>
                     </div>
                 </div>
@@ -525,14 +525,14 @@
                 <div class="row g-3">
                     <div class="col-md-3 col-sm-6">
                         <span class="text-muted small d-block">Total Energy Consumed</span>
-                        <strong class="fs-5 text-success">{{ "%.2f"|format(overall_official_kwh) }} kWh</strong>
-                        <small class="text-muted d-block">(Avg {{ "%.2f"|format(overall_avg_monthly_kwh) }} kWh/month)</small>
+                        <strong class="fs-5 text-success">{{ "%.2f"|format(overall_official_kwh or 0.0) }} kWh</strong>
+                        <small class="text-muted d-block">(Avg {{ "%.2f"|format(overall_avg_monthly_kwh or 0.0) }} kWh/month)</small>
                     </div>
                     <div class="col-md-3 col-sm-6">
                         <span class="text-muted small d-block">Highest Spending Month</span>
                         {% if highest_usage_month %}
-                        <strong class="fs-5 text-danger">৳ {{ "%.2f"|format(highest_usage_month.total_usage_tk) }}</strong>
-                        <small class="text-muted d-block">{{ highest_usage_month.month }} {{ highest_usage_month.year }} ({{ "%.2f"|format(highest_usage_month.used_energy_kwh) }} kWh)</small>
+                        <strong class="fs-5 text-danger">৳ {{ "%.2f"|format(highest_usage_month.total_usage_tk or 0.0) }}</strong>
+                        <small class="text-muted d-block">{{ highest_usage_month.month }} {{ highest_usage_month.year }} ({{ "%.2f"|format(highest_usage_month.used_energy_kwh or 0.0) }} kWh)</small>
                         {% else %}
                         <strong class="fs-5 text-muted">N/A</strong>
                         {% endif %}
@@ -540,8 +540,8 @@
                     <div class="col-md-3 col-sm-6">
                         <span class="text-muted small d-block">Lowest Spending Month</span>
                         {% if lowest_usage_month %}
-                        <strong class="fs-5 text-primary">৳ {{ "%.2f"|format(lowest_usage_month.total_usage_tk) }}</strong>
-                        <small class="text-muted d-block">{{ lowest_usage_month.month }} {{ lowest_usage_month.year }} ({{ "%.2f"|format(lowest_usage_month.used_energy_kwh) }} kWh)</small>
+                        <strong class="fs-5 text-primary">৳ {{ "%.2f"|format(lowest_usage_month.total_usage_tk or 0.0) }}</strong>
+                        <small class="text-muted d-block">{{ lowest_usage_month.month }} {{ lowest_usage_month.year }} ({{ "%.2f"|format(lowest_usage_month.used_energy_kwh or 0.0) }} kWh)</small>
                         {% else %}
                         <strong class="fs-5 text-muted">N/A</strong>
                         {% endif %}
@@ -603,15 +603,15 @@
                             <tr>
                                 <td class="fw-semibold">{{ usage.year }}</td>
                                 <td class="fw-semibold text-primary">{{ usage.month }}</td>
-                                <td>৳ {{ "%.2f"|format(usage.total_recharge) }}</td>
-                                <td>৳ {{ "%.2f"|format(usage.total_recharge - usage.used_electricity_tk - usage.meter_rent - usage.demand_charge - usage.vat) }}</td>
-                                <td>৳ {{ "%.2f"|format(usage.used_electricity_tk) }}</td>
-                                <td>৳ {{ "%.2f"|format(usage.meter_rent) }}</td>
-                                <td>৳ {{ "%.2f"|format(usage.demand_charge) }}</td>
-                                <td>৳ {{ "%.2f"|format(usage.vat) }}</td>
-                                <td class="fw-bold text-dark">৳ {{ "%.2f"|format(usage.total_usage_tk) }}</td>
-                                <td class="text-primary fw-semibold">৳ {{ "%.2f"|format(usage.end_month_balance) }}</td>
-                                <td class="fw-bold text-success">{{ "%.2f"|format(usage.used_energy_kwh) }}</td>
+                                <td>৳ {{ "%.2f"|format(usage.total_recharge or 0.0) }}</td>
+                                <td>৳ {{ "%.2f"|format((usage.total_recharge or 0.0) - (usage.used_electricity_tk or 0.0) - (usage.meter_rent or 0.0) - (usage.demand_charge or 0.0) - (usage.vat or 0.0)) }}</td>
+                                <td>৳ {{ "%.2f"|format(usage.used_electricity_tk or 0.0) }}</td>
+                                <td>৳ {{ "%.2f"|format(usage.meter_rent or 0.0) }}</td>
+                                <td>৳ {{ "%.2f"|format(usage.demand_charge or 0.0) }}</td>
+                                <td>৳ {{ "%.2f"|format(usage.vat or 0.0) }}</td>
+                                <td class="fw-bold text-dark">৳ {{ "%.2f"|format(usage.total_usage_tk or 0.0) }}</td>
+                                <td class="text-primary fw-semibold">৳ {{ "%.2f"|format(usage.end_month_balance or 0.0) }}</td>
+                                <td class="fw-bold text-success">{{ "%.2f"|format(usage.used_energy_kwh or 0.0) }}</td>
                             </tr>
                             {% else %}
                             <tr>
@@ -623,12 +623,12 @@
                         <tfoot class="table-light fw-bold text-center">
                             <tr>
                                 <td colspan="2">Lifetime Totals & Averages</td>
-                                <td>৳ {{ "%.2f"|format(all_monthly_usages|sum(attribute='total_recharge')) }}</td>
+                                <td>৳ {{ "%.2f"|format(overall_official_recharge) }}</td>
                                 <td>-</td>
-                                <td>৳ {{ "%.2f"|format(all_monthly_usages|sum(attribute='used_electricity_tk')) }}</td>
-                                <td>৳ {{ "%.2f"|format(all_monthly_usages|sum(attribute='meter_rent')) }}</td>
-                                <td>৳ {{ "%.2f"|format(all_monthly_usages|sum(attribute='demand_charge')) }}</td>
-                                <td>৳ {{ "%.2f"|format(all_monthly_usages|sum(attribute='vat')) }}</td>
+                                <td>৳ {{ "%.2f"|format(overall_official_electricity_tk) }}</td>
+                                <td>৳ {{ "%.2f"|format(overall_official_meter_rent) }}</td>
+                                <td>৳ {{ "%.2f"|format(overall_official_demand_charge) }}</td>
+                                <td>৳ {{ "%.2f"|format(overall_official_vat) }}</td>
                                 <td class="text-dark">৳ {{ "%.2f"|format(overall_official_billed_tk) }}</td>
                                 <td>-</td>
                                 <td class="text-success">{{ "%.2f"|format(overall_official_kwh) }} kWh</td>
@@ -715,7 +715,7 @@
                         <tfoot class="table-light fw-bold text-center">
                             <tr>
                                 <td colspan="7">Grand Total All Recharges</td>
-                                <td class="text-success fs-6">৳ {{ "%.2f"|format(overall_total_recharge_amt) }}</td>
+                                <td class="text-success fs-6">৳ {{ "%.2f"|format(overall_total_recharge_amt or 0.0) }}</td>
                                 <td>{{ all_recharges|length }} Records</td>
                             </tr>
                         </tfoot>

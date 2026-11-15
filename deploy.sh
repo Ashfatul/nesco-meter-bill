@@ -30,7 +30,7 @@ echo "👤 System User: $USER_NAME"
 echo "🐍 Setting up Python Virtual Environment..."
 python3 -m venv venv
 source venv/bin/activate
-pip install Flask Flask-SQLAlchemy Flask-Login Flask-Bcrypt requests beautifulsoup4 gunicorn
+pip install -r requirements.txt
 
 # 4. Initialize Database
 echo "🗄️ Initializing SQLite Database..."
